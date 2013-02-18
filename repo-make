@@ -179,7 +179,8 @@ my $PROGNAME = 'repo-make';
     foreach my $pkgname (@$pkgnameref) {
       my $filename = $pkgfilename{$pkgname};
       die("Missing package: $filename\n") unless (-s "$pkgbuildpath/$filename");
-      move("$pkgbuildpath/$filename", $cfg{TARGET}) or die();
+      move("$pkgbuildpath/$filename", $cfg{TARGET})
+        or die("Move of $filename to $cfg{TARGET} failed: $!\n");
     }
   }
 
