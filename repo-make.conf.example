@@ -1,0 +1,14 @@
+# Build configuration for repo-make. If this file is managed by version control
+# then you may place your own settings into a "repo-make-custom.conf" file
+# which overloads settings of this config file.
+# See repo-make.conf(5) for further information.
+
+# Name of this repository
+REPONAME=testrepo
+
+# Order to build packages. To temporarily disable build for a package, just
+# comment the line by prefixing it with "#".
+startlist
+firstpackage
+secondpackage
+dir1/thirdpackage

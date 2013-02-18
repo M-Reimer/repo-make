@@ -1,0 +1,26 @@
+Installation of repo-make
+-------------------------
+
+There are two ways to install repo-make:
+
+1) PKGBUILD
+
+Just run "makepkg -fc" in the top source directory to get a working
+installation package that can be installed with "pacman -U".
+
+2) Makefile
+
+To install repo-make, type
+
+make install
+
+To uninstall, you may use
+
+make uninstall
+
+If you just call "make", then anything, the Makefile does, is to generate the
+man pages.
+
+The recommended call to package repo-add would be:
+
+make PREFIX=/usr DESTDIR=/path/to/packagedir install

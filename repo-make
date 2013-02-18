@@ -1,0 +1,353 @@
+#!/usr/bin/perl
+#    repo-make - Tool to autobuild a set of PKGBUILDs into a working repository
+#    Copyright (C) 2012 Manuel Reimer <manuel.reimer@gmx.de>
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# WARNING: This script is meant to be used on dedicated build hosts! The goal
+# is to autobuild a bigger set of PKGBUILDs automatically without any
+# confirmation. To make this possible, dependencies are automatically installed
+# to the system, this script runs on!
+
+use strict;
+use warnings;
+use Getopt::Std;
+use Pod::PlainText;
+use Cwd;
+use File::Copy;
+use Data::Dumper;
+use POSIX;
+
+my $VERSION = '0.0.1';
+my $PROGNAME = 'repo-make';
+
+# Main code
+{
+  $Getopt::Std::STANDARD_HELP_VERSION = 1;
+  getopts('', my %OPTS);
+
+  # Check privileges. We have to be root!
+  die("You have to be root to run repo-make!\n") if ($< != 0);
+
+  # Check for package DB. If no update for over 24 hours, then force update!
+  my $dbmtime = (stat('/var/lib/pacman/sync'))[9] or die();
+  if (time() - $dbmtime > 24 * 60 * 60) {
+    system('pacman', '-Syu', '--noconfirm');
+  }
+
+  # Read config file(s)
+  my %cfg;
+  ParseConfig('repo-make.conf', \%cfg, 1);
+  die("Missing REPONAME in repomake.conf\n") unless defined($cfg{REPONAME});
+  $cfg{TARGET} = "repo";
+  ParseConfig('repo-make-custom.conf', \%cfg, 1)
+    if (-s 'repo-make-custom.conf');
+  $cfg{BUILDUSER} = "build";
+  ParseConfig('/etc/repo-make.conf', \%cfg)
+    if (-s '/etc/repo-make.conf');
+
+  # Check for BUILDUSER. If not there, create it.
+  unless (getpwnam($cfg{BUILDUSER})) {
+    print STDERR "Creating user $cfg{BUILDUSER}\n";
+    system('useradd', '-m', $cfg{BUILDUSER});
+    die("Failed to create user $cfg{BUILDUSER}\n") if ($?);
+  }
+
+  # Check if BUILDUSER is able to reach our stuff.
+  system('su', $cfg{BUILDUSER}, '-c', 'cat repo-make.conf > /dev/null');
+  die("$cfg{BUILDUSER} is not allowed to access build data\n") if ($?);
+
+  # Check for target directory. If missing, try to create it.
+  unless (-d $cfg{TARGET}) {
+    mkdir($cfg{TARGET}) or die("Failed to create directory $cfg{TARGET}\n");
+  }
+
+  # Read makepkg.conf
+  my $makepkgconf = ReadMakepkgConf();
+
+  # Read PKGBUILDs and preprocess header information
+  my %pkgfilename;
+  my @buildorder;
+  foreach my $pkgbuildpath (@{$cfg{list}}) {
+    next if ($pkgbuildpath =~ /(^#|^\s*$)/);
+    die("Directory missing: $pkgbuildpath\n") unless (-d $pkgbuildpath);
+
+    # Parse the PKGBUILD file
+    my $pkgheader = ParsePKGBUILD("$pkgbuildpath/PKGBUILD");
+
+    # Check for required header entries
+    foreach my $tocheck ('pkgver', 'pkgrel') {
+      die("Missing $tocheck in $pkgbuildpath/PKGBUILD\n")
+        unless (defined($pkgheader->{$tocheck}));
+    }
+    foreach my $tocheck ('pkgname', 'arch') {
+      die("Missing $tocheck in $pkgbuildpath/PKGBUILD\n")
+        if (@{$pkgheader->{$tocheck}} == 0);
+    }
+
+    foreach my $pkgname (@{$pkgheader->{pkgname}}) {
+      # Get expected package filename
+      my $filename = "$pkgname-"
+        . ($pkgheader->{epoch} ? "$pkgheader->{epoch}:" : '')
+        . "$pkgheader->{pkgver}-$pkgheader->{pkgrel}-"
+        . (($pkgheader->{arch}->[0] eq 'any') ? 'any' : $makepkgconf->{CARCH})
+        . $makepkgconf->{PKGEXT};
+
+      # Remember package filename for later access
+      $pkgfilename{$pkgname} = $filename;
+      # Also store package name for the provided packages
+      foreach my $provided (@{$pkgheader->{provides}}) {
+        $pkgfilename{$provided} = $filename;
+      }
+    }
+
+    # Remember the data, we need for the build process
+    push(@buildorder, [$pkgbuildpath,
+                       $pkgheader->{pkgname},
+                       [@{$pkgheader->{depends}}, @{$pkgheader->{makedepends}}],
+                      ]);
+  }
+
+  PACKAGE: foreach my $packagedata (@buildorder) {
+    my ($pkgbuildpath, $pkgnameref, $dependsref) = @$packagedata;
+
+    # Still to build?
+    foreach my $pkgname (@$pkgnameref) {
+      next PACKAGE if (-s "$cfg{TARGET}/$pkgfilename{$pkgname}");
+    }
+
+    # Get sure that package path is owned by our build user
+    system ('chown', '-R', $cfg{BUILDUSER}, $pkgbuildpath);
+    die("Failed to change owner of $pkgbuildpath to build user\n") if ($?);
+
+    # Install missing dependencies before building
+    my @repodeps;
+    my @ourdeps;
+    foreach my $depend (@$dependsref) {
+      if (defined($pkgfilename{$depend})) {
+        my $depfile = "$cfg{TARGET}/$pkgfilename{$depend}";
+        die("Expected package $depfile not built. Check build order!\n")
+          unless (-s $depfile);
+        push(@ourdeps, $depfile);
+      }
+      else {
+        push(@repodeps, $depend);
+      }
+    }
+    if (@repodeps > 0) {
+      system('pacman', '-S', '--noconfirm', '--needed', '--asdeps', @repodeps);
+      die("pacman failed!\n") if ($?);
+    }
+    if (@ourdeps > 0) {
+      system('pacman', '-U', '--noconfirm', '--needed', '--asdeps', @ourdeps);
+      die("pacman failed!\n") if ($?);
+    }
+
+    # Build package in context of BUILDUSER
+    my $pid = fork();
+    die('fork failed') unless(defined($pid));
+    if ($pid == 0) {
+      my (undef,undef,$uid,$gid,undef,undef,undef,$home)
+        = getpwnam($cfg{BUILDUSER});
+      setgid($gid) or die('setgid failed');
+      setuid($uid) or die('setuid failed');
+      $ENV{HOME} = $home;
+      chdir($pkgbuildpath);
+      exec('makepkg', '-fc');
+    }
+
+    # Wait for the forked process, we created above, and check for build errors
+    $SIG{INT} = 'IGNORE';
+    $SIG{QUIT} = 'IGNORE';
+    waitpid($pid, 0);
+    $SIG{INT} = 'DEFAULT';
+    $SIG{QUIT} = 'DEFAULT';
+    die("makepkg failed for $pkgbuildpath!\n") if ($?);
+
+    # Check if all packages, we expected, have been created
+    foreach my $pkgname (@$pkgnameref) {
+      my $filename = $pkgfilename{$pkgname};
+      die("Missing package: $filename\n") unless (-s "$pkgbuildpath/$filename");
+      move("$pkgbuildpath/$filename", $cfg{TARGET}) or die();
+    }
+  }
+
+  # Run cleanup
+  my %packages = reverse(%pkgfilename);
+  opendir(my $DH, $cfg{TARGET}) or die();
+  while (my $file = readdir($DH)) {
+    next if ($file =~ /^\./);
+    next if ($file !~ /\Q$makepkgconf->{PKGEXT}\E$/);
+    unless (defined($packages{$file})) {
+      unlink("$cfg{TARGET}/$file") or die("Failed to delete: $file\n");
+    }
+  }
+  closedir($DH);
+
+  # Run "repo-add"
+  my $oldcwd = getcwd();
+  chdir($cfg{TARGET});
+  unlink("$cfg{REPONAME}.db");
+  unlink("$cfg{REPONAME}.db.tar.gz");
+  system('repo-add', "$cfg{REPONAME}.db.tar.gz", keys(%packages));
+  die('repo-add failed') if ($?);
+  chdir($oldcwd);
+}
+
+sub VERSION_MESSAGE {
+  print "$PROGNAME $VERSION\n";
+}
+
+sub HELP_MESSAGE {
+  # Print out the built-in POD documentation in case of --help parameter
+  Pod::PlainText->new(sentence => 0)->parse_from_file($0);
+}
+
+sub ParseConfig {
+  my($aPath, $aHashRef, $aListAllowed) = @_;
+  my $mode = 0;
+
+  my @list;
+  open(my $FH, '<', $aPath) or die("Can't open $aPath\n");
+  while (my $line = <$FH>) {
+    $line =~ s/\s*$//;
+    next if ($line =~ /\s*#/ || $line eq '');
+
+    if (my ($pref, $value) = $line =~ /^\s*([A-Z_]+)\s*=\s*(.+)/) {
+      $aHashRef->{$pref} = $value;
+    }
+    elsif ($aListAllowed && $line =~ /^[A-Z0-9\/_-]+$/i) {
+      push(@list, $line);
+    }
+    else {
+      die("Parsing error in $aPath on line $.\n");
+    }
+  }
+
+  $aHashRef->{list} = \@list if (@list > 0);
+}
+
+# PKGBUILD parser
+sub ParsePKGBUILD {
+  my ($aPath) = @_;
+  my @values = ('pkgver', 'pkgrel', 'epoch');
+  my @arrays = ('pkgname', 'depends', 'makedepends', 'provides', 'arch');
+
+  # Read file until we reach first function
+  my $header = '';
+  open(my $FH, '<', $aPath) or die("Failed to open $aPath");
+  while (my $line = <$FH>) {
+    last if ($line =~ /^\w+\(\)/);
+    $header .= $line;
+  }
+  close($FH);
+
+  # Fetch single values first
+  my %values;
+  foreach my $name (@values) {
+    ($values{$name}) = $header =~ /^$name=['"]?(.+?)['"]?$/m;
+  }
+
+  # Fetch arrays. This one has some limitations. It doesn't allow values with
+  # spaces, and anything after the equal sign is just dropped to make further
+  # processing easier
+  foreach my $name (@arrays) {
+    # First try: Multiline grouped with brackets
+    my ($values) = $header =~ /^$name=\(([^)]+)/m;
+    # Second try: Just fetch the part after the equal sign
+    ($values) = $header =~ /^$name=(.+)$/m if (!defined($values));
+    my @list;
+    if (defined($values)) {
+      $values =~ s/['"]//g;
+      @list = split(/\s+/, $values);
+      for (my $index = 0; $index < @list; $index++) {
+        $list[$index] =~ s/=.+//;
+      }
+    }
+    $values{$name} = \@list;
+  }
+  return \%values;
+}
+
+# makepkg.conf parser
+sub ReadMakepkgConf {
+  open(my $FH, '<', '/etc/makepkg.conf') or die("Can't read makepkg.conf\n");
+  my %values;
+  while (my $line = <$FH>) {
+    $values{CARCH} = $1 if ($line =~ /^CARCH=["']([^"']+)/);
+    $values{PKGEXT} = $1 if ($line =~ /^PKGEXT=["']([^"']+)/);
+  }
+  close($FH);
+
+  die("Can't get CARCH from makepkg.conf\n") unless (defined($values{CARCH}));
+  die("Can't get PKGEXT from makepkg.conf\n") unless (defined($values{PKGEXT}));
+
+  return \%values;
+}
+
+__END__
+
+=head1 NAME
+
+repo-make - A tool to autobuild a set of PKGBUILD's
+
+=head1 SYNOPSIS
+
+B<repo-make>
+
+=head1 DESCRIPTION
+
+B<repo-make> is automatic build system, designed for distributions based on the pacman package manager and the PKGBUILD based (makepkg) build system.
+
+It auto-generates packages based on a I<repo-make.conf> that has to exist in the the directory, where you call B<repo-make>.
+
+=head2 Command Switches
+
+Switches include:
+
+=over 5
+
+=item B<--help>
+
+display this help and exit
+
+=item B<--version>
+
+output version information and exit
+
+=back
+
+=head1 WARNING
+
+B<repo-make> has to run with root privileges as its goal is to auto-generate a set of packages B<without user interaction>! It will automatically update the system, repo-make runs on, and install missing dependencies from the global repositories or from the newly built packages.
+
+Even though the build itself runs with an unprivileged user, it is not recommended to use repo-make on a productive system. Please set up a dedicated build environment. Virtualbox can be very handy to do so.
+
+=head1 FILES
+
+=over 5
+
+=item F<./repo-make-custom.conf>
+
+=item F<./repo-make.conf>
+
+=item F</etc/repo-make.conf>
+
+Configuration files that control the build process. Further information in repo-make.conf(5).
+
+=back
+
+=head1 SEE ALSO
+
+repo-make.conf(5)

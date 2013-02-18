@@ -1,0 +1,59 @@
+=head1 NAME
+
+repo-make.conf - Configuration file for repo-make autobuild system
+
+=head1 SYNOPSIS
+
+B<repo-make.conf>
+
+=head1 DESCRIPTION
+
+The file B<repo-make.conf> contains all information, required to build a set of PKGBUILDs into a working repository.
+
+At your choice, a second configuration file B<repo-make-custom.conf> can be placed next to B<repo-make.conf>. The "custom configuration file" overrides settings of the "general configuration file".
+
+A global configuration file may be placed to /etc/repo-make.conf which overrides the above two repository specific files.
+
+=head1 VARIABLES
+
+The following variables can be set in repo-make.conf files:
+
+ BUILDUSER=build
+
+=over 5
+
+This is the user name which will be used to build the packages with. There is a built-in default user name, which is just "build". This variable can only be set in F</etc/repo-make.conf>!
+
+=back
+
+ TARGET=path/to/repository/path
+
+=over 5
+
+This is where the finished packages are placed to. The default is F<./repo>. This variable can only be set in F<repo-make-custom.conf> and F</etc/repo-make.conf>!
+
+=back
+
+ REPONAME=repo_name
+
+=over 5
+
+Set the name of your repository here. Will be used when "repo-add" is called after building the packages.
+
+=back
+
+ firstpackage
+ secondpackage
+ dir1/thirdpackage
+
+=over 5
+
+The order of package paths follows after all configuration variables. List them in the right order (dependencies first!) or build will fail!
+
+Comments may be added anywhere in the files by prefixing the lines with '#'.
+
+=back
+
+=head1 SEE ALSO
+
+repo-make(1)
