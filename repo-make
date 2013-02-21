@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #    repo-make - Tool to autobuild a set of PKGBUILDs into a working repository
-#    Copyright (C) 2012 Manuel Reimer <manuel.reimer@gmx.de>
+#    Copyright (C) 2013 Manuel Reimer <manuel.reimer@gmx.de>
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as published by
@@ -26,8 +26,13 @@ use Getopt::Std;
 use Pod::PlainText;
 use Cwd;
 use File::Copy;
-use Data::Dumper;
 use POSIX;
+use constant {
+  PW_NAME => 0,
+  PW_UID  => 2,
+  PW_GID  => 3,
+  PW_DIR  => 7
+};
 
 my $VERSION = '0.0.1';
 my $PROGNAME = 'repo-make';
@@ -58,10 +63,12 @@ my $PROGNAME = 'repo-make';
     if (-s '/etc/repo-make.conf');
 
   # Check for BUILDUSER. If not there, create it.
-  unless (getpwnam($cfg{BUILDUSER})) {
+  my @builduserinfo;
+  unless (@builduserinfo = getpwnam($cfg{BUILDUSER})) {
     print STDERR "Creating user $cfg{BUILDUSER}\n";
     system('useradd', '-m', $cfg{BUILDUSER});
     die("Failed to create user $cfg{BUILDUSER}\n") if ($?);
+    @builduserinfo = getpwnam($cfg{BUILDUSER}) or die($!);
   }
 
   # Check if BUILDUSER is able to reach our stuff.
@@ -75,6 +82,9 @@ my $PROGNAME = 'repo-make';
 
   # Read makepkg.conf
   my $makepkgconf = ReadMakepkgConf();
+
+  # Get sure gpg-agent is running if we create signed packages
+  HandleGPGAgent(\@builduserinfo) if ($makepkgconf->{BUILDENV}->{sign});
 
   # Read PKGBUILDs and preprocess header information
   my %pkgfilename;
@@ -119,6 +129,7 @@ my $PROGNAME = 'repo-make';
                       ]);
   }
 
+  # Now run over all packages again and build missing packages
   PACKAGE: foreach my $packagedata (@buildorder) {
     my ($pkgbuildpath, $pkgnameref, $dependsref) = @$packagedata;
 
@@ -158,11 +169,9 @@ my $PROGNAME = 'repo-make';
     my $pid = fork();
     die('fork failed') unless(defined($pid));
     if ($pid == 0) {
-      my (undef,undef,$uid,$gid,undef,undef,undef,$home)
-        = getpwnam($cfg{BUILDUSER});
-      setgid($gid) or die('setgid failed');
-      setuid($uid) or die('setuid failed');
-      $ENV{HOME} = $home;
+      setgid($builduserinfo[PW_GID]) or die('setgid failed');
+      setuid($builduserinfo[PW_UID]) or die('setuid failed');
+      $ENV{HOME} = $builduserinfo[PW_DIR];
       chdir($pkgbuildpath);
       exec('makepkg', '-fc');
     }
@@ -215,6 +224,39 @@ sub HELP_MESSAGE {
   Pod::PlainText->new(sentence => 0)->parse_from_file($0);
 }
 
+sub HandleGPGAgent {
+  my ($aUserinfo) = @_;
+
+  return unless (-x '/usr/bin/gpg-agent');
+
+  # Make our builduser the owner of the tty, we run at.
+  my $tty = readlink('/proc/self/fd/0');
+  system('chown', $aUserinfo->[PW_NAME], $tty);
+  die("Failed to chown $tty to build user\n") if ($?);
+
+  # If info file exists, then read it and check connection. If OK, then return
+  my $infofile = "$aUserinfo->[PW_DIR]/.gpg-agent-info";
+  if (-f $infofile) {
+    ReadGPGAgentInfo($infofile);
+    system('su', $aUserinfo->[PW_NAME], '-c', 'gpg-agent 2> /dev/null');
+    return unless ($?);
+  }
+
+  # Start daemon and read info file
+  system('su', $aUserinfo->[PW_NAME], '-c',
+         'gpg-agent --daemon --write-env-file > /dev/null');
+  die("gpg-agent startup failed\n") if ($?);
+  ReadGPGAgentInfo($infofile);
+}
+
+sub ReadGPGAgentInfo {
+  my ($aPath) = @_;
+  open(my $fh, '<', $aPath) or die("Failed to read .gpg-agent-info\n");
+  (my $info = <$fh>) =~ s/^[^=]+=//;
+  close($fh);
+  $ENV{GPG_AGENT_INFO} = $info;
+}
+
 sub ParseConfig {
   my($aPath, $aHashRef, $aListAllowed) = @_;
   my $mode = 0;
@@ -223,7 +265,7 @@ sub ParseConfig {
   open(my $FH, '<', $aPath) or die("Can't open $aPath\n");
   while (my $line = <$FH>) {
     $line =~ s/\s*$//;
-    next if ($line =~ /\s*#/ || $line eq '');
+    next if ($line =~ /^\s*#/ || $line eq '');
 
     if (my ($pref, $value) = $line =~ /^\s*([A-Z_]+)\s*=\s*(.+)/) {
       $aHashRef->{$pref} = $value;
@@ -285,14 +327,18 @@ sub ParsePKGBUILD {
 sub ReadMakepkgConf {
   open(my $FH, '<', '/etc/makepkg.conf') or die("Can't read makepkg.conf\n");
   my %values;
+  my $buildenv;
   while (my $line = <$FH>) {
     $values{CARCH} = $1 if ($line =~ /^CARCH=["']([^"']+)/);
     $values{PKGEXT} = $1 if ($line =~ /^PKGEXT=["']([^"']+)/);
+    $buildenv = $1 if ($line =~ /^BUILDENV=\(([^)]+)/);
   }
   close($FH);
 
   die("Can't get CARCH from makepkg.conf\n") unless (defined($values{CARCH}));
   die("Can't get PKGEXT from makepkg.conf\n") unless (defined($values{PKGEXT}));
+  die("Can't get BUILDENV from makepkg.conf\n") unless(defined($buildenv));
+  $values{BUILDENV} = { map {$_ => 1} split(/\s+/, $buildenv) };
 
   return \%values;
 }
