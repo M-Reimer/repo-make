@@ -27,6 +27,7 @@ use Pod::PlainText;
 use Cwd;
 use File::Copy;
 use POSIX;
+use Term::ANSIColor;
 use constant {
   PW_NAME => 0,
   PW_UID  => 2,
@@ -39,6 +40,15 @@ my $PROGNAME = 'repo-make';
 
 # Main code
 {
+  # Colorize the error messages
+  $SIG{__DIE__} =  sub {
+    die(@_) if ($^S);
+    print STDERR color('bold red'), "==> $PROGNAME ERROR: ", color('reset'),
+                 color('bold'), $_[0], color('reset');
+    exit(1);
+  };
+
+  # Read command line parameters
   $Getopt::Std::STANDARD_HELP_VERSION = 1;
   getopts('', my %OPTS);
 
@@ -65,19 +75,19 @@ my $PROGNAME = 'repo-make';
   # Check for BUILDUSER. If not there, create it.
   my @builduserinfo;
   unless (@builduserinfo = getpwnam($cfg{BUILDUSER})) {
-    print STDERR "Creating user $cfg{BUILDUSER}\n";
+    print STDERR "Creating user '$cfg{BUILDUSER}'\n";
     system('useradd', '-m', $cfg{BUILDUSER});
-    die("Failed to create user $cfg{BUILDUSER}\n") if ($?);
+    die("Failed to create user '$cfg{BUILDUSER}'\n") if ($?);
     @builduserinfo = getpwnam($cfg{BUILDUSER}) or die($!);
   }
 
   # Check if BUILDUSER is able to reach our stuff.
   system('su', $cfg{BUILDUSER}, '-c', 'cat repo-make.conf > /dev/null');
-  die("$cfg{BUILDUSER} is not allowed to access build data\n") if ($?);
+  die("User '$cfg{BUILDUSER}' is not allowed to access build data\n") if ($?);
 
   # Check for target directory. If missing, try to create it.
   unless (-d $cfg{TARGET}) {
-    mkdir($cfg{TARGET}) or die("Failed to create directory $cfg{TARGET}\n");
+    mkdir($cfg{TARGET}) or die("Failed to create directory '$cfg{TARGET}'\n");
   }
 
   # Read makepkg.conf
@@ -98,11 +108,11 @@ my $PROGNAME = 'repo-make';
 
     # Check for required header entries
     foreach my $tocheck ('pkgver', 'pkgrel') {
-      die("Missing $tocheck in $pkgbuildpath/PKGBUILD\n")
+      die("Missing '$tocheck' in '$pkgbuildpath/PKGBUILD'\n")
         unless (defined($pkgheader->{$tocheck}));
     }
     foreach my $tocheck ('pkgname', 'arch') {
-      die("Missing $tocheck in $pkgbuildpath/PKGBUILD\n")
+      die("Missing '$tocheck' in '$pkgbuildpath/PKGBUILD'\n")
         if (@{$pkgheader->{$tocheck}} == 0);
     }
 
@@ -140,7 +150,7 @@ my $PROGNAME = 'repo-make';
 
     # Get sure that package path is owned by our build user
     system ('chown', '-R', $cfg{BUILDUSER}, $pkgbuildpath);
-    die("Failed to change owner of $pkgbuildpath to build user\n") if ($?);
+    die("Failed to change owner of '$pkgbuildpath' to build user\n") if ($?);
 
     # Install missing dependencies before building
     my @repodeps;
@@ -148,7 +158,7 @@ my $PROGNAME = 'repo-make';
     foreach my $depend (@$dependsref) {
       if (defined($pkgfilename{$depend})) {
         my $depfile = "$cfg{TARGET}/$pkgfilename{$depend}";
-        die("Expected package $depfile not built. Check build order!\n")
+        die("Expected package '$depfile' not built. Check build order!\n")
           unless (-s $depfile);
         push(@ourdeps, $depfile);
       }
@@ -182,19 +192,19 @@ my $PROGNAME = 'repo-make';
     waitpid($pid, 0);
     $SIG{INT} = 'DEFAULT';
     $SIG{QUIT} = 'DEFAULT';
-    die("makepkg failed for $pkgbuildpath!\n") if ($?);
+    die("makepkg failed for '$pkgbuildpath'!\n") if ($?);
 
     # Check if all packages, we expected, have been created
     foreach my $pkgname (@$pkgnameref) {
       my $filename = $pkgfilename{$pkgname};
       die("Missing package: $filename\n") unless (-s "$pkgbuildpath/$filename");
       move("$pkgbuildpath/$filename", $cfg{TARGET})
-        or die("Move of $filename to $cfg{TARGET} failed: $!\n");
+        or die("Move of '$filename' to '$cfg{TARGET}' failed: $!\n");
 
       if ($makepkgconf->{BUILDENV}->{sign}) {
         die("Signature missing!\n") unless (-s "$pkgbuildpath/$filename.sig");
         move("$pkgbuildpath/$filename.sig", $cfg{TARGET})
-          or die ("Move of $filename.sig to $cfg{TARGET} failed: $!\n");
+          or die ("Move of '$filename.sig' to '$cfg{TARGET}' failed: $!\n");
       }
     }
   }
@@ -218,7 +228,7 @@ my $PROGNAME = 'repo-make';
   unlink("$cfg{REPONAME}.db");
   unlink("$cfg{REPONAME}.db.tar.gz");
   system('repo-add', "$cfg{REPONAME}.db.tar.gz", keys(%packages));
-  die('repo-add failed') if ($?);
+  die("repo-add failed\n") if ($?);
   chdir($oldcwd);
 }
 
@@ -239,7 +249,7 @@ sub HandleGPGAgent {
   # Make our builduser the owner of the tty, we run at.
   my $tty = readlink('/proc/self/fd/0');
   system('chown', $aUserinfo->[PW_NAME], $tty);
-  die("Failed to chown $tty to build user\n") if ($?);
+  die("Failed to chown '$tty' to build user\n") if ($?);
 
   # If info file exists, then read it and check connection. If OK, then return
   my $infofile = "$aUserinfo->[PW_DIR]/.gpg-agent-info";
@@ -258,7 +268,7 @@ sub HandleGPGAgent {
 
 sub ReadGPGAgentInfo {
   my ($aPath) = @_;
-  open(my $fh, '<', $aPath) or die("Failed to read .gpg-agent-info\n");
+  open(my $fh, '<', $aPath) or die("Failed to read '$aPath'\n");
   (my $info = <$fh>) =~ s/^[^=]+=//;
   close($fh);
   $ENV{GPG_AGENT_INFO} = $info;
@@ -269,7 +279,7 @@ sub ParseConfig {
   my $mode = 0;
 
   my @list;
-  open(my $FH, '<', $aPath) or die("Can't open $aPath\n");
+  open(my $FH, '<', $aPath) or die("Can't open '$aPath'\n");
   while (my $line = <$FH>) {
     $line =~ s/\s*$//;
     next if ($line =~ /^\s*#/ || $line eq '');
@@ -281,7 +291,7 @@ sub ParseConfig {
       push(@list, $line);
     }
     else {
-      die("Parsing error in $aPath on line $.\n");
+      die("Parsing error in '$aPath' on line $.\n");
     }
   }
 
@@ -296,7 +306,7 @@ sub ParsePKGBUILD {
 
   # Read file until we reach first function
   my $header = '';
-  open(my $FH, '<', $aPath) or die("Failed to open $aPath");
+  open(my $FH, '<', $aPath) or die("Failed to open '$aPath'\n");
   while (my $line = <$FH>) {
     last if ($line =~ /^\w+\(\)/);
     $header .= $line;
@@ -386,7 +396,7 @@ output version information and exit
 
 B<repo-make> has to run with root privileges as its goal is to auto-generate a set of packages B<without user interaction>! It will automatically update the system, repo-make runs on, and install missing dependencies from the global repositories or from the newly built packages.
 
-Even though the build itself runs with an unprivileged user, it is not recommended to use repo-make on a productive system. Please set up a dedicated build environment. Virtualbox can be very handy to do so.
+Even though the build itself runs with an unprivileged user, it is not recommended to use repo-make on a productive system. Please set up a dedicated build environment. KVM or VirtualBox can be very handy to do so.
 
 =head1 FILES
 
@@ -404,4 +414,4 @@ Configuration files that control the build process. Further information in repo-
 
 =head1 SEE ALSO
 
-repo-make.conf(5)
+repo-make.conf(5), makepkg.conf(5)
