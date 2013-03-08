@@ -101,6 +101,7 @@ my $PROGNAME = 'repo-make';
 
   # Read PKGBUILDs and preprocess header information
   my %pkgfilename;
+  my %depends;
   my @buildorder;
   foreach my $pkgbuildpath (@{$cfg{list}}) {
     next if ($pkgbuildpath =~ /(^#|^\s*$)/);
@@ -129,24 +130,24 @@ my $PROGNAME = 'repo-make';
 
       # Remember package filename for later access
       $pkgfilename{$pkgname} = $filename;
+      $depends{$pkgname} = [@{$pkgheader->{depends}},
+                            @{$pkgheader->{makedepends}}];
       # Also store package name for the provided packages
       foreach my $provided (@{$pkgheader->{provides}}) {
         $pkgfilename{$provided} = $filename;
+        $depends{$provided} = $depends{$pkgname};
       }
     }
 
     # Remember the data, we need for the build process
-    push(@buildorder, [$pkgbuildpath,
-                       $pkgheader->{pkgname},
-                       [@{$pkgheader->{depends}}, @{$pkgheader->{makedepends}}],
-                      ]);
+    push(@buildorder, [$pkgbuildpath, $pkgheader->{pkgname}]);
   }
 
   RemoveOrphanDeps() if ($opts{V});
 
   # Now run over all packages again and build missing packages
   PACKAGE: foreach my $packagedata (@buildorder) {
-    my ($pkgbuildpath, $pkgnameref, $dependsref) = @$packagedata;
+    my ($pkgbuildpath, $pkgnameref) = @$packagedata;
 
     # Still to build?
     foreach my $pkgname (@$pkgnameref) {
@@ -157,28 +158,53 @@ my $PROGNAME = 'repo-make';
     system ('chown', '-R', $cfg{BUILDUSER}, $pkgbuildpath);
     die("Failed to change owner of '$pkgbuildpath' to build user\n") if ($?);
 
-    # Install missing dependencies before building
+    # Separate dependencies into "ours" and "system repository"
     my @repodeps;
     my @ourdeps;
-    foreach my $depend (@$dependsref) {
+    foreach my $depend (@{$depends{$pkgnameref->[0]}}) {
       if (defined($pkgfilename{$depend})) {
-        my $depfile = "$cfg{TARGET}/$pkgfilename{$depend}";
-        die("Expected package '$depfile' not built. Check build order!\n")
-          unless (-s $depfile);
-        push(@ourdeps, $depfile);
+        push(@ourdeps, $depend);
       }
       else {
         push(@repodeps, $depend);
       }
     }
+
+    # Collect "dependencies of dependencies" for our packages
+    my @depstocheck;
+    my %depchecked;
+    do {
+      @depstocheck = @ourdeps;
+      foreach my $depend (@depstocheck) {
+        next if (defined($depchecked{$depend}));
+        foreach my $dependsdep (@{$depends{$depend}}) {
+          if (defined($pkgfilename{$dependsdep})) {
+            unshift(@ourdeps, $dependsdep);
+          }
+        }
+        $depchecked{$depend} = 1;
+      }
+    } while (@ourdeps != @depstocheck);
+
+    # Get filenames for our dependencies and check if they have been built
+    foreach my $depend (@ourdeps) {
+      $depend = $pkgfilename{$depend}; # Replace the name with the filename
+      die("Expected package '$depend' not built. Check build order!\n")
+        unless (-s "$cfg{TARGET}/$depend");
+    }
+
+    # Install dependencies
     InfoMsg("Installing missing dependencies...") if (@ourdeps + @repodeps > 0);
     if (@repodeps > 0) {
       system('pacman', '-S', '--noconfirm', '--needed', '--asdeps', @repodeps);
       die("pacman failed!\n") if ($?);
     }
     if (@ourdeps > 0) {
+      my $oldcwd = getcwd();
+      chdir($cfg{TARGET});
       system('pacman', '-U', '--noconfirm', '--needed', '--asdeps', @ourdeps);
       die("pacman failed!\n") if ($?);
+      chdir($oldcwd);
     }
 
     # Build package in context of BUILDUSER
