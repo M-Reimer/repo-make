@@ -49,8 +49,9 @@ my $PROGNAME = 'repo-make';
   };
 
   # Read command line parameters
+  my %opts;
   $Getopt::Std::STANDARD_HELP_VERSION = 1;
-  getopts('', my %OPTS);
+  getopts('Vt:', \%opts);
 
   # Check privileges. We have to be root!
   die("You have to be root to run repo-make!\n") if ($< != 0);
@@ -71,6 +72,8 @@ my $PROGNAME = 'repo-make';
   $cfg{BUILDUSER} = "build";
   ParseConfig('/etc/repo-make.conf', \%cfg)
     if (-s '/etc/repo-make.conf');
+
+  $cfg{TARGET} = $opts{t} if ($opts{t});
 
   # Check for BUILDUSER. If not there, create it.
   my @builduserinfo;
@@ -138,6 +141,8 @@ my $PROGNAME = 'repo-make';
                        [@{$pkgheader->{depends}}, @{$pkgheader->{makedepends}}],
                       ]);
   }
+
+  RemoveOrphanDeps() if ($opts{V});
 
   # Now run over all packages again and build missing packages
   PACKAGE: foreach my $packagedata (@buildorder) {
@@ -207,6 +212,8 @@ my $PROGNAME = 'repo-make';
           or die ("Move of '$filename.sig' to '$cfg{TARGET}' failed: $!\n");
       }
     }
+
+    RemoveOrphanDeps() if ($opts{V});
   }
 
   # Run cleanup
@@ -272,6 +279,16 @@ sub ReadGPGAgentInfo {
   (my $info = <$fh>) =~ s/^[^=]+=//;
   close($fh);
   $ENV{GPG_AGENT_INFO} = $info;
+}
+
+sub RemoveOrphanDeps {
+  open(my $fhlist, '-|', 'pacman', '-Qdtq') or die("Can't start pacman: $!\n");
+  my $list = join('', <$fhlist>);
+  close($fhlist);
+  my @list = split("\n", $list);
+  return if (@list == 0);
+  system('pacman', '-Rs', '--noconfirm', @list);
+  die("pacman failed\n") if ($?);
 }
 
 sub ParseConfig {
@@ -382,13 +399,21 @@ Switches include:
 
 =over 5
 
+=item B<-t> <path>
+
+Sets the target path where the finished packages are placed to and overrides the TARGET setting in repo-make.conf
+
+=item B<-V>
+
+Runs repo-make in "verify mode" which can be used to check if your I<depends> or I<makedepends> arrays really contain all needed packages for a successful build. To do this, repo-make uninstalls all orphan dependencies between the builds.
+
 =item B<--help>
 
-display this help and exit
+Display this help and exit
 
 =item B<--version>
 
-output version information and exit
+Output version information and exit
 
 =back
 
