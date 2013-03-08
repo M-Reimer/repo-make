@@ -171,6 +171,7 @@ my $PROGNAME = 'repo-make';
         push(@repodeps, $depend);
       }
     }
+    InfoMsg("Installing missing dependencies...") if (@ourdeps + @repodeps > 0);
     if (@repodeps > 0) {
       system('pacman', '-S', '--noconfirm', '--needed', '--asdeps', @repodeps);
       die("pacman failed!\n") if ($?);
@@ -248,6 +249,11 @@ sub HELP_MESSAGE {
   Pod::PlainText->new(sentence => 0)->parse_from_file($0);
 }
 
+sub InfoMsg {
+  print STDERR color('bold green'), "==> $PROGNAME: ", color('reset'),
+               color('bold'), $_[0], color('reset'), "\n";
+}
+
 sub HandleGPGAgent {
   my ($aUserinfo) = @_;
 
@@ -287,6 +293,7 @@ sub RemoveOrphanDeps {
   close($fhlist);
   my @list = split("\n", $list);
   return if (@list == 0);
+  InfoMsg("Uninstalling unrequired dependencies...");
   system('pacman', '-Rs', '--noconfirm', @list);
   die("pacman failed\n") if ($?);
 }
