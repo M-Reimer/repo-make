@@ -120,6 +120,7 @@ my $PROGNAME = 'repo-make';
         if (@{$pkgheader->{$tocheck}} == 0);
     }
 
+    my $dependsref = [@{$pkgheader->{depends}}, @{$pkgheader->{makedepends}}];
     foreach my $pkgname (@{$pkgheader->{pkgname}}) {
       # Get expected package filename
       my $filename = "$pkgname-"
@@ -128,14 +129,13 @@ my $PROGNAME = 'repo-make';
         . (($pkgheader->{arch}->[0] eq 'any') ? 'any' : $makepkgconf->{CARCH})
         . $makepkgconf->{PKGEXT};
 
-      # Remember package filename for later access
+      # Remember package filename and dependencies for later access
       $pkgfilename{$pkgname} = $filename;
-      $depends{$pkgname} = [@{$pkgheader->{depends}},
-                            @{$pkgheader->{makedepends}}];
-      # Also store package name for the provided packages
+      $depends{$pkgname} = $dependsref;
+      # Also store the same info for the provided packages
       foreach my $provided (@{$pkgheader->{provides}}) {
         $pkgfilename{$provided} = $filename;
-        $depends{$provided} = $depends{$pkgname};
+        $depends{$provided} = $dependsref;
       }
     }
 
