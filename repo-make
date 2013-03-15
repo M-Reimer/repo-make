@@ -59,6 +59,7 @@ my $PROGNAME = 'repo-make';
   # Check for package DB. If no update for over 24 hours, then force update!
   my $dbmtime = (stat('/var/lib/pacman/sync'))[9] or die();
   if (time() - $dbmtime > 24 * 60 * 60) {
+    InfoMsg('Upgrading build system...');
     system('pacman', '-Syu', '--noconfirm');
   }
 
@@ -78,7 +79,7 @@ my $PROGNAME = 'repo-make';
   # Check for BUILDUSER. If not there, create it.
   my @builduserinfo;
   unless (@builduserinfo = getpwnam($cfg{BUILDUSER})) {
-    print STDERR "Creating user '$cfg{BUILDUSER}'\n";
+    InfoMsg("Creating user '$cfg{BUILDUSER}'");
     system('useradd', '-m', $cfg{BUILDUSER});
     die("Failed to create user '$cfg{BUILDUSER}'\n") if ($?);
     @builduserinfo = getpwnam($cfg{BUILDUSER}) or die($!);
@@ -194,7 +195,7 @@ my $PROGNAME = 'repo-make';
     }
 
     # Install dependencies
-    InfoMsg("Installing missing dependencies...") if (@ourdeps + @repodeps > 0);
+    InfoMsg('Installing missing dependencies...') if (@ourdeps + @repodeps > 0);
     if (@repodeps > 0) {
       system('pacman', '-S', '--noconfirm', '--needed', '--asdeps', @repodeps);
       die("pacman failed!\n") if ($?);
@@ -319,7 +320,7 @@ sub RemoveOrphanDeps {
   close($fhlist);
   my @list = split("\n", $list);
   return if (@list == 0);
-  InfoMsg("Uninstalling unrequired dependencies...");
+  InfoMsg('Uninstalling unrequired dependencies...');
   system('pacman', '-Rs', '--noconfirm', @list);
   die("pacman failed\n") if ($?);
 }
