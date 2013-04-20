@@ -28,6 +28,7 @@ use Cwd;
 use File::Copy;
 use POSIX;
 use Term::ANSIColor;
+use Archive::Tar;
 use constant {
   PW_NAME => 0,
   PW_UID  => 2,
@@ -244,7 +245,7 @@ my $PROGNAME = 'repo-make';
     RemoveOrphanDeps() if ($opts{V});
   }
 
-  # Run cleanup
+  # Run cleanup on the target directory
   my %packages = reverse(%pkgfilename);
   opendir(my $DH, $cfg{TARGET}) or die();
   while (my $file = readdir($DH)) {
@@ -257,14 +258,61 @@ my $PROGNAME = 'repo-make';
   }
   closedir($DH);
 
-  # Run "repo-add"
-  my $oldcwd = getcwd();
-  chdir($cfg{TARGET});
-  unlink("$cfg{REPONAME}.db");
-  unlink("$cfg{REPONAME}.db.tar.gz");
-  system('repo-add', "$cfg{REPONAME}.db.tar.gz", keys(%packages));
-  die("repo-add failed\n") if ($?);
-  chdir($oldcwd);
+  # Run cleanup on the DB file.
+  my $dbpath = "$cfg{TARGET}/$cfg{REPONAME}.db.tar.gz";
+  if (-s $dbpath) {
+    my @dirstoremove;
+    my %dirfiles;
+    my $tar = Archive::Tar->new;
+    my @files = $tar->read($dbpath);
+    foreach my $tarfile (@files) {
+      # Split dirname and filename part
+      my ($dirname, $filename) = $tarfile->{name} =~ /([^\/]+)\/?(.*)/;
+
+      # Store list of files in directory for the case, we want to delete it
+      $dirfiles{$dirname} = [] unless($dirfiles{$dirname});
+      push(@{$dirfiles{$dirname}}, $tarfile->{name});
+
+      # Only continue for the file "desc" and try to find full package filename
+      next if ($filename ne 'desc');
+      my $pkgfilename = "$dirname-$makepkgconf->{CARCH}$makepkgconf->{PKGEXT}";
+      unless ($packages{$pkgfilename}) {
+        $pkgfilename = "$dirname-any$makepkgconf->{PKGEXT}";
+      }
+
+      # If the package file doesn't exist or is outdated, then remove from DB
+      if (!$packages{$pkgfilename} ||
+          (stat("$cfg{TARGET}/$pkgfilename"))[9] > $tarfile->{mtime}) {
+        push(@dirstoremove, $dirname);
+      }
+      # If Package exists (and is up to date) then remove from list of packages
+      elsif ($packages{$pkgfilename}) {
+        delete($packages{$pkgfilename});
+      }
+    }
+
+    # Process removals and write updated DB file
+    if (@dirstoremove > 0) {
+      foreach my $dirname (@dirstoremove) {
+        $tar->remove(@{$dirfiles{$dirname}});
+      }
+      $tar->write($dbpath, COMPRESS_GZIP);
+      my $shortdbpath = "$cfg{TARGET}/$cfg{REPONAME}.db";
+      unlink($shortdbpath);
+      symlink("$cfg{REPONAME}.db.tar.gz", $shortdbpath)
+        or copy($dbpath, $shortdbpath) or die("Failed to write $shortdbpath\n");
+    }
+  }
+
+  # Run "repo-add" if needed
+  if (keys(%packages) > 0) {
+    my $oldcwd = getcwd();
+    chdir($cfg{TARGET});
+    unlink("$cfg{REPONAME}.db");
+    system('repo-add', "$cfg{REPONAME}.db.tar.gz", keys(%packages));
+    die("repo-add failed\n") if ($?);
+    chdir($oldcwd);
+  }
 }
 
 sub VERSION_MESSAGE {
