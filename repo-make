@@ -413,10 +413,10 @@ sub ParsePKGBUILD {
   close($FH);
 
   # Fetch single values first
-  my %values;
-  foreach my $name (@values) {
-    ($values{$name}) = $header =~ /^$name=['"]?(.+?)['"]?$/m;
-  }
+  my (%values) = $header =~ /^([A-Z0-9_]+)=['"]?(.+?)['"]?$/gmi;
+
+  # Special case for pkgver consisting of several parts
+  $values{pkgver} =~ s/\${?$_}?/$values{$_}/ foreach (keys(%values));
 
   # Fetch arrays. This one has some limitations. It doesn't allow values with
   # spaces, and anything after the equal sign is just dropped to make further
