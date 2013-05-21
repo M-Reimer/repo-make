@@ -122,7 +122,9 @@ my $PROGNAME = 'repo-make';
         if (@{$pkgheader->{$tocheck}} == 0);
     }
 
-    my $dependsref = [@{$pkgheader->{depends}}, @{$pkgheader->{makedepends}}];
+    my $dependsref = [@{$pkgheader->{depends}},
+                      @{$pkgheader->{makedepends}},
+                      @{$pkgheader->{checkdepends}}];
     foreach my $pkgname (@{$pkgheader->{pkgname}}) {
       # Get expected package filename
       my $filename = "$pkgname-"
@@ -401,7 +403,7 @@ sub ParseConfig {
 sub ParsePKGBUILD {
   my ($aPath) = @_;
   my @values = ('pkgver', 'pkgrel', 'epoch');
-  my @arrays = ('pkgname', 'depends', 'makedepends', 'provides', 'arch');
+  my @arrays = ('pkgname', 'depends', 'makedepends', 'checkdepends', 'provides', 'arch');
 
   # Read file until we reach first function
   my $header = '';
