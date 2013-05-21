@@ -386,7 +386,7 @@ sub ParseConfig {
     if (my ($pref, $value) = $line =~ /^\s*([A-Z_]+)\s*=\s*(.+)/) {
       $aHashRef->{$pref} = $value;
     }
-    elsif ($aListAllowed && $line =~ /^[A-Z0-9\/_-]+$/i) {
+    elsif ($aListAllowed && $line =~ /^[A-Z0-9\/_.-]+$/i) {
       push(@list, $line);
     }
     else {
