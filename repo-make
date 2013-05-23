@@ -29,6 +29,7 @@ use File::Copy;
 use POSIX;
 use Term::ANSIColor;
 use Archive::Tar;
+use IPC::Open2;
 use constant {
   PW_NAME => 0,
   PW_UID  => 2,
@@ -110,7 +111,7 @@ my $PROGNAME = 'repo-make';
     die("Directory missing: $pkgbuildpath\n") unless (-d $pkgbuildpath);
 
     # Parse the PKGBUILD file
-    my $pkgheader = ParsePKGBUILD("$pkgbuildpath/PKGBUILD");
+    my $pkgheader = ParsePKGBUILD($pkgbuildpath, $cfg{BUILDUSER});
 
     # Check for required header entries
     foreach my $tocheck ('pkgver', 'pkgrel') {
@@ -401,42 +402,29 @@ sub ParseConfig {
 
 # PKGBUILD parser
 sub ParsePKGBUILD {
-  my ($aPath) = @_;
-  my @values = ('pkgver', 'pkgrel', 'epoch');
-  my @arrays = ('pkgname', 'depends', 'makedepends', 'checkdepends', 'provides', 'arch');
+  my ($aPath, $aBuilduser) = @_;
 
-  # Read file until we reach first function
-  my $header = '';
-  open(my $FH, '<', $aPath) or die("Failed to open '$aPath'\n");
-  while (my $line = <$FH>) {
-    last if ($line =~ /^\w+\(\)/);
-    $header .= $line;
-  }
-  close($FH);
+  # List of variables, we need. The ones with "1" as value are arrays.
+  my %variables = (pkgver  => 0, pkgrel      => 0, epoch        => 0,
+                   pkgname => 1, provides    => 1, arch         => 1,
+                   depends => 1, makedepends => 1, checkdepends => 1);
 
-  # Fetch single values first
-  my (%values) = $header =~ /^([A-Z0-9_]+)=['"]?(.+?)['"]?$/gmi;
+  # Open a bash instance in context of BUILDUSER.
+  open2(my $fhout, my $fhin, 'su', $aBuilduser, '-s', '/usr/bin/bash');
 
-  # Special case for pkgver consisting of several parts
-  $values{pkgver} =~ s/\${?$_}?/$values{$_}/ foreach (keys(%values));
+  # Send small shellscript to load PKGBUILD and print out variables.
+  print $fhin "cd '$aPath'\n";
+  print $fhin "source PKGBUILD\n";
+  print $fhin "IFS='\t'\n";
+  print $fhin "echo \"$_\t\${$_\[*\]}\"\n" foreach (keys(%variables));
+  close($fhin);
 
-  # Fetch arrays. This one has some limitations. It doesn't allow values with
-  # spaces, and anything after the equal sign is just dropped to make further
-  # processing easier
-  foreach my $name (@arrays) {
-    # First try: Multiline grouped with brackets
-    my ($values) = $header =~ /^$name=\(([^)]+)/m;
-    # Second try: Just fetch the part after the equal sign
-    ($values) = $header =~ /^$name=(.+)$/m if (!defined($values));
-    my @list;
-    if (defined($values)) {
-      $values =~ s/['"]//g;
-      @list = split(/\s+/, $values);
-      for (my $index = 0; $index < @list; $index++) {
-        $list[$index] =~ s/=.+//;
-      }
-    }
-    $values{$name} = \@list;
+  # Interpret response.
+  my %values;
+  while(my $line = <$fhout>) {
+    chomp($line);
+    my($varname, @values) = split(/\t/, $line);
+    $values{$varname} = ($variables{$varname} == 1) ? \@values : $values[0];
   }
   return \%values;
 }
