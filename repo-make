@@ -426,6 +426,8 @@ sub ParsePKGBUILD {
   while(my $line = <$fhout>) {
     chomp($line);
     my($varname, @values) = split(/\t/, $line);
+    # Drop anything after the equal sign
+    s/=.*// foreach(@values);
     $values{$varname} = ($variables{$varname} == 1) ? \@values : $values[0];
   }
   return \%values;
