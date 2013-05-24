@@ -178,15 +178,13 @@ my $PROGNAME = 'repo-make';
     # Collect "dependencies of dependencies" for our packages
     my @depstocheck;
     my %depchecked;
-    my %seendeps = map {$_ => 1} @ourdeps;
     do {
       @depstocheck = @ourdeps;
       foreach my $depend (@depstocheck) {
         next if (defined($depchecked{$depend}));
         foreach my $dependsdep (@{$depends{$depend}}) {
           if (defined($pkgfilename{$dependsdep})) {
-            unshift(@ourdeps, $dependsdep) unless ($seendeps{$dependsdep});
-            $seendeps{$dependsdep} = 1;
+            unshift(@ourdeps, $dependsdep);
           }
         }
         $depchecked{$depend} = 1;
@@ -199,6 +197,10 @@ my $PROGNAME = 'repo-make';
       die("Expected package '$depend' not built. Check build order!\n")
         unless (-s "$cfg{TARGET}/$depend");
     }
+
+    # Get sure that we don't have duplicates in the list of our dependencies
+    my %ourdeps_hash = map {$_ => 1} @ourdeps;
+    @ourdeps = keys(%ourdeps_hash);
 
     # Install dependencies
     InfoMsg('Installing missing dependencies...') if (@ourdeps + @repodeps > 0);
