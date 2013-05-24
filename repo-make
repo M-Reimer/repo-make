@@ -178,13 +178,15 @@ my $PROGNAME = 'repo-make';
     # Collect "dependencies of dependencies" for our packages
     my @depstocheck;
     my %depchecked;
+    my %seendeps = map {$_ => 1} @ourdeps;
     do {
       @depstocheck = @ourdeps;
       foreach my $depend (@depstocheck) {
         next if (defined($depchecked{$depend}));
         foreach my $dependsdep (@{$depends{$depend}}) {
           if (defined($pkgfilename{$dependsdep})) {
-            unshift(@ourdeps, $dependsdep);
+            unshift(@ourdeps, $dependsdep) unless ($seendeps{$dependsdep});
+            $seendeps{$dependsdep} = 1;
           }
         }
         $depchecked{$depend} = 1;
