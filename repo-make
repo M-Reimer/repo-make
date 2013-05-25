@@ -204,16 +204,16 @@ my $PROGNAME = 'repo-make';
 
     # Install dependencies
     InfoMsg('Installing missing dependencies...') if (@ourdeps + @repodeps > 0);
-    if (@repodeps > 0) {
-      system('pacman', '-S', '--noconfirm', '--needed', '--asdeps', @repodeps);
-      die("pacman failed!\n") if ($?);
-    }
     if (@ourdeps > 0) {
       my $oldcwd = getcwd();
       chdir($cfg{TARGET});
       system('pacman', '-U', '--noconfirm', '--needed', '--asdeps', @ourdeps);
       die("pacman failed!\n") if ($?);
       chdir($oldcwd);
+    }
+    if (@repodeps > 0) {
+      system('pacman', '-S', '--noconfirm', '--needed', '--asdeps', @repodeps);
+      die("pacman failed!\n") if ($?);
     }
 
     # Build package in context of BUILDUSER
