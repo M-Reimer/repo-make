@@ -30,6 +30,8 @@ use POSIX;
 use Term::ANSIColor;
 use Archive::Tar;
 use IPC::Open2;
+use IPC::Open3;
+use FileHandle;
 use constant {
   PW_NAME => 0,
   PW_UID  => 2,
@@ -207,13 +209,13 @@ my $PROGNAME = 'repo-make';
     if (@ourdeps > 0) {
       my $oldcwd = getcwd();
       chdir($cfg{TARGET});
-      system('pacman', '-U', '--noconfirm', '--needed', '--asdeps', @ourdeps);
-      die("pacman failed!\n") if ($?);
+      AutoPacman('-U', '--needed', '--asdeps', @ourdeps)
+        or die("pacman failed!\n");
       chdir($oldcwd);
     }
     if (@repodeps > 0) {
-      system('pacman', '-S', '--noconfirm', '--needed', '--asdeps', @repodeps);
-      die("pacman failed!\n") if ($?);
+      AutoPacman('-S', '--needed', '--asdeps', @repodeps)
+        or die("pacman failed!\n");
     }
 
     # Build package in context of BUILDUSER
@@ -378,6 +380,38 @@ sub RemoveOrphanDeps {
   InfoMsg('Uninstalling unrequired dependencies...');
   system('pacman', '-Rs', '--noconfirm', @list);
   die("pacman failed\n") if ($?);
+}
+
+# Subfunction to automate pacman in cases where "--noconfirm" doesn't work
+sub AutoPacman {
+  my @aOptions = @_;
+
+  # Get sure that we have the same output everywhere
+  local $ENV{LANG} = 'C';
+
+  # Open pacman and connect our own STDIN and STDERR
+  my($fhin, $fherr);
+  use Symbol 'gensym'; $fherr = gensym;
+  my $pid = open3($fhin, ">&STDOUT", $fherr, 'pacman', @aOptions);
+  $fherr->autoflush(1);
+
+  # Let's chat with pacman ;)
+  while(sysread($fherr, my $buffer, 1024)) {
+    print STDERR $buffer;
+    # Remove conflicting packages, so we can go on with installation.
+    if ($buffer =~ /are in conflict.*Remove/) {
+      print STDERR "y\n";
+      print $fhin "y\n";
+    }
+    # All other cases: Just proceed with default.
+    else {
+      print STDERR "\n";
+      print $fhin "\n";
+    }
+  }
+
+  waitpid($pid, 0);
+  return($? == 0);
 }
 
 sub ParseConfig {
