@@ -32,6 +32,7 @@ use Archive::Tar;
 use IPC::Open2;
 use IPC::Open3;
 use FileHandle;
+use feature "state";
 use constant {
   PW_NAME => 0,
   PW_UID  => 2,
@@ -106,7 +107,6 @@ my $PROGNAME = 'repo-make';
 
   # Read PKGBUILDs and preprocess header information
   my %pkgfilename;
-  my %depends;
   my @buildorder;
   foreach my $pkgbuildpath (@{$cfg{list}}) {
     next if ($pkgbuildpath =~ /(^#|^\s*$)/);
@@ -138,23 +138,21 @@ my $PROGNAME = 'repo-make';
 
       # Remember package filename and dependencies for later access
       $pkgfilename{$pkgname} = $filename;
-      $depends{$pkgname} = $dependsref;
       # Also store the same info for the provided packages
       foreach my $provided (@{$pkgheader->{provides}}) {
         $pkgfilename{$provided} = $filename;
-        $depends{$provided} = $dependsref;
       }
     }
 
     # Remember the data, we need for the build process
-    push(@buildorder, [$pkgbuildpath, $pkgheader->{pkgname}]);
+    push(@buildorder, [$pkgbuildpath, $pkgheader->{pkgname}, $dependsref]);
   }
 
   RemoveOrphanDeps() if ($opts{V});
 
   # Now run over all packages again and build missing packages
   PACKAGE: foreach my $packagedata (@buildorder) {
-    my ($pkgbuildpath, $pkgnameref) = @$packagedata;
+    my ($pkgbuildpath, $pkgnameref, $pkgdepends) = @$packagedata;
 
     # Still to build?
     foreach my $pkgname (@$pkgnameref) {
@@ -168,7 +166,7 @@ my $PROGNAME = 'repo-make';
     # Separate dependencies into "ours" and "system repository"
     my @repodeps;
     my @ourdeps;
-    foreach my $depend (@{$depends{$pkgnameref->[0]}}) {
+    foreach my $depend (@$pkgdepends) {
       if (defined($pkgfilename{$depend})) {
         push(@ourdeps, $depend);
       }
@@ -184,21 +182,18 @@ my $PROGNAME = 'repo-make';
       @depstocheck = @ourdeps;
       foreach my $depend (@depstocheck) {
         next if (defined($depchecked{$depend}));
-        foreach my $dependsdep (@{$depends{$depend}}) {
-          if (defined($pkgfilename{$dependsdep})) {
-            unshift(@ourdeps, $dependsdep);
+        my $depdepends = GetPKGDeps("$cfg{TARGET}/$pkgfilename{$depend}");
+        foreach my $depdepend (@$depdepends) {
+          if (defined($pkgfilename{$depdepend})) {
+            unshift(@ourdeps, $depdepend);
           }
         }
         $depchecked{$depend} = 1;
       }
     } while (@ourdeps != @depstocheck);
 
-    # Get filenames for our dependencies and check if they have been built
-    foreach my $depend (@ourdeps) {
-      $depend = $pkgfilename{$depend}; # Replace the name with the filename
-      die("Expected package '$depend' not built. Check build order!\n")
-        unless (-s "$cfg{TARGET}/$depend");
-    }
+    # Get filenames for our dependencies
+    $_ = $pkgfilename{$_} foreach (@ourdeps);
 
     # Get sure that we don't have duplicates in the list of our dependencies
     my %ourdeps_hash = map {$_ => 1} @ourdeps;
@@ -382,6 +377,27 @@ sub RemoveOrphanDeps {
   die("pacman failed\n") if ($?);
 }
 
+sub GetPKGDeps {
+  my ($aPath) = @_;
+
+  die("Expected package '".basename($aPath)."' not built. Check build order!\n")
+    unless (-s $aPath);
+
+  state %cache;
+  unless ($cache{$aPath}) {
+    my @deplist;
+    open(my $fhlist, '-|', 'tar', '-xOf', $aPath, '.PKGINFO') or die();
+    while(my $line = <$fhlist>) {
+      my ($value) = $line =~ /^depend ?= ?(.+)$/ or next;
+      # Drop anything after the equal sign
+      $value =~ s/[<>=].*//;
+      push(@deplist, $value);
+    }
+    $cache{$aPath} = \@deplist;
+  }
+  return $cache{$aPath};
+}
+
 # Subfunction to automate pacman in cases where "--noconfirm" doesn't work
 sub AutoPacman {
   my @aOptions = @_;
@@ -403,6 +419,8 @@ sub AutoPacman {
       print STDERR "y\n";
       print $fhin "y\n";
     }
+    # Don't answer warnings.
+    elsif ($buffer =~ /warning:/) {}
     # All other cases: Just proceed with default.
     else {
       print STDERR "\n";
@@ -463,7 +481,7 @@ sub ParsePKGBUILD {
     chomp($line);
     my($varname, @values) = split(/\t/, $line);
     # Drop anything after the equal sign
-    s/=.*// foreach(@values);
+    s/[<>=].*// foreach(@values);
     $values{$varname} = ($variables{$varname} == 1) ? \@values : $values[0];
   }
   return \%values;
