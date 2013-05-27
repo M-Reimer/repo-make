@@ -127,8 +127,9 @@ my $PROGNAME = 'repo-make';
     }
 
     my $dependsref = [@{$pkgheader->{depends}},
-                      @{$pkgheader->{makedepends}},
-                      @{$pkgheader->{checkdepends}}];
+                      @{$pkgheader->{makedepends}}];
+    push(@$dependsref, @{$pkgheader->{checkdepends}})
+      if ($makepkgconf->{BUILDENV}->{check});
     foreach my $pkgname (@{$pkgheader->{pkgname}}) {
       # Get expected package filename
       my $filename = "$pkgname-"
