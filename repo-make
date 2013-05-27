@@ -26,6 +26,7 @@ use Getopt::Std;
 use Pod::PlainText;
 use Cwd;
 use File::Copy;
+use File::Basename;
 use POSIX;
 use Term::ANSIColor;
 use Archive::Tar;
