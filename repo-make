@@ -155,10 +155,12 @@ my $PROGNAME = 'repo-make';
   PACKAGE: foreach my $packagedata (@buildorder) {
     my ($pkgbuildpath, $pkgnameref, $pkgdepends) = @$packagedata;
 
-    # Still to build?
+    # Still something to build?
+    my $packages_built;
     foreach my $pkgname (@$pkgnameref) {
-      next PACKAGE if (-s "$cfg{TARGET}/$pkgfilename{$pkgname}");
+      $packages_built++ if (-s "$cfg{TARGET}/$pkgfilename{$pkgname}");
     }
+    next PACKAGE if ($packages_built == @$pkgnameref);
 
     # Get sure that package path is owned by our build user
     system ('chown', '-R', $cfg{BUILDUSER}, $pkgbuildpath);
@@ -233,15 +235,17 @@ my $PROGNAME = 'repo-make';
     $SIG{QUIT} = 'DEFAULT';
     die("makepkg failed for '$pkgbuildpath'!\n") if ($?);
 
-    # Check if all packages, we expected, have been created
+    # Check if all packages, we expected, have been created and move in place
     foreach my $pkgname (@$pkgnameref) {
       my $filename = $pkgfilename{$pkgname};
       die("Missing package: $filename\n") unless (-s "$pkgbuildpath/$filename");
+      unlink("$cfg{TARGET}/$filename");
       move("$pkgbuildpath/$filename", $cfg{TARGET})
         or die("Move of '$filename' to '$cfg{TARGET}' failed: $!\n");
 
       if ($makepkgconf->{BUILDENV}->{sign}) {
         die("Signature missing!\n") unless (-s "$pkgbuildpath/$filename.sig");
+        unlink("$cfg{TARGET}/$filename.sig");
         move("$pkgbuildpath/$filename.sig", $cfg{TARGET})
           or die ("Move of '$filename.sig' to '$cfg{TARGET}' failed: $!\n");
       }
