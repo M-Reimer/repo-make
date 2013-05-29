@@ -3,7 +3,7 @@
 DESTDIR=
 PREFIX=/usr/local
 MANDIR=$(PREFIX)/share/man
-BINDIR=$(PREFIX)/sbin
+BINDIR=$(PREFIX)/bin
 VERSION=$(shell sed -rn 's/.*\$$VERSION = .(.+?).;$$/\1/p' repo-make)
 
 .PHONY: all install uninstall clean dist

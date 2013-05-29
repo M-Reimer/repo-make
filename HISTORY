@@ -1,0 +1,16 @@
+vdrpbd Revision History
+-----------------------
+
+2013-02-18: Version 0.0.1
+
+- Initial revision.
+
+2013-05-29: Version 1.0.0
+
+- Support for signing packages including automatic startup of gpg-agent
+- Verify mode to check dependency lists
+- Improved dependency tracking
+- Faster database creation
+- Better parser for PKGBUILD headers
+- Support for checkdepends
+- Many bugfixes
