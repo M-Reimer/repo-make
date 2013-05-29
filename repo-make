@@ -414,7 +414,7 @@ sub AutoPacman {
   # Open pacman and connect our own STDIN and STDERR
   my($fhin, $fherr);
   use Symbol 'gensym'; $fherr = gensym;
-  my $pid = open3($fhin, ">&STDOUT", $fherr, 'pacman', @aOptions);
+  my $pid = open3($fhin, '>&STDOUT', $fherr, 'pacman', @aOptions);
   $fherr->autoflush(1);
 
   # Let's chat with pacman ;)
@@ -425,10 +425,9 @@ sub AutoPacman {
       print STDERR "y\n";
       print $fhin "y\n";
     }
-    # Don't answer warnings.
-    elsif ($buffer =~ /warning:/) {}
     # All other cases: Just proceed with default.
-    else {
+    elsif ($buffer =~ /Enter a number \(/ ||
+           $buffer =~ /\[y\/n\]/i) {
       print STDERR "\n";
       print $fhin "\n";
     }
