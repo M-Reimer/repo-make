@@ -392,7 +392,7 @@ sub GetPKGDeps {
   state %cache;
   unless ($cache{$aPath}) {
     my @deplist;
-    open(my $fhlist, '-|', 'tar', '-xOf', $aPath, '.PKGINFO') or die();
+    open(my $fhlist, '-|', 'bsdtar', '-xOf', $aPath, '.PKGINFO') or die();
     while(my $line = <$fhlist>) {
       my ($value) = $line =~ /^depend ?= ?(.+)$/ or next;
       # Drop anything after the equal sign
