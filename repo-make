@@ -157,7 +157,7 @@ my $PROGNAME = 'repo-make';
     my ($pkgbuildpath, $pkgnameref, $pkgdepends) = @$packagedata;
 
     # Still something to build?
-    my $packages_built;
+    my $packages_built = 0;
     foreach my $pkgname (@$pkgnameref) {
       $packages_built++ if (-s "$cfg{TARGET}/$pkgfilename{$pkgname}");
     }
