@@ -409,7 +409,7 @@ sub AutoPacman {
   my @aOptions = @_;
 
   # Get sure that we have the same output everywhere
-  local $ENV{LANG} = 'C';
+  local $ENV{LC_MESSAGES} = 'C';
 
   # Open pacman and connect our own STDIN and STDERR
   my($fhin, $fherr);
