@@ -83,6 +83,12 @@ my $PROGNAME = 'repo-make';
 
   $cfg{TARGET} = $opts{t} if ($opts{t});
 
+  # Read makepkg.conf
+  my $makepkgconf = ReadMakepkgConf();
+
+  # Replace "$CARCH" in TARGET
+  $cfg{TARGET} =~ s/\$CARCH/$makepkgconf->{CARCH}/;
+
   # Check for BUILDUSER. If not there, create it.
   my @builduserinfo;
   unless (@builduserinfo = getpwnam($cfg{BUILDUSER})) {
@@ -100,9 +106,6 @@ my $PROGNAME = 'repo-make';
   unless (-d $cfg{TARGET}) {
     mkdir($cfg{TARGET}) or die("Failed to create directory '$cfg{TARGET}'\n");
   }
-
-  # Read makepkg.conf
-  my $makepkgconf = ReadMakepkgConf();
 
   # Get sure gpg-agent is running if we create signed packages
   HandleGPGAgent(\@builduserinfo) if ($makepkgconf->{BUILDENV}->{sign});

@@ -30,7 +30,7 @@ This is the user name which will be used to build the packages with. There is a 
 
 =over 5
 
-This is where the finished packages are placed to. The default is F<./repo>. This variable can only be set in F<repo-make-custom.conf> and F</etc/repo-make.conf>!
+This is where the finished packages are placed to. The default is F<./repo>. This variable can only be set in F<repo-make-custom.conf> and F</etc/repo-make.conf>! You may use the variable $CARCH to add the current architecture to your target path.
 
 =back
 
