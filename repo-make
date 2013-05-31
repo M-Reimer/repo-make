@@ -30,6 +30,7 @@ use File::Basename;
 use POSIX;
 use Term::ANSIColor;
 use Archive::Tar;
+$Archive::Tar::DO_NOT_USE_PREFIX = 1;
 use IPC::Open2;
 use IPC::Open3;
 use FileHandle;
@@ -124,6 +125,13 @@ my $PROGNAME = 'repo-make';
     foreach my $tocheck ('pkgname', 'arch') {
       die("Missing '$tocheck' in '$pkgbuildpath/PKGBUILD'\n")
         if (@{$pkgheader->{$tocheck}} == 0);
+    }
+
+    # Continue if the PKGBUILD can't be built on current architecture.
+    unless($pkgheader->{arch}->[0] eq 'any' ||
+           grep {$_ eq $makepkgconf->{CARCH}} @{$pkgheader->{arch}}) {
+      WarnMsg("Skipping $pkgbuildpath. Architecture not supported.");
+      next;
     }
 
     my $dependsref = [@{$pkgheader->{depends}},
@@ -336,6 +344,11 @@ sub HELP_MESSAGE {
 
 sub InfoMsg {
   print STDERR color('bold green'), "==> $PROGNAME: ", color('reset'),
+               color('bold'), $_[0], color('reset'), "\n";
+}
+
+sub WarnMsg {
+  print STDERR color('bold yellow'), "==> $PROGNAME: WARNING: ", color('reset'),
                color('bold'), $_[0], color('reset'), "\n";
 }
 
