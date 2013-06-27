@@ -121,10 +121,6 @@ my $PROGNAME = 'repo-make';
     my $pkgheader = ParsePKGBUILD($pkgbuildpath, $cfg{BUILDUSER});
 
     # Check for required header entries
-    foreach my $tocheck ('pkgver', 'pkgrel') {
-      die("Missing '$tocheck' in '$pkgbuildpath/PKGBUILD'\n")
-        unless (defined($pkgheader->{$tocheck}));
-    }
     foreach my $tocheck ('pkgname', 'arch') {
       die("Missing '$tocheck' in '$pkgbuildpath/PKGBUILD'\n")
         if (@{$pkgheader->{$tocheck}} == 0);
@@ -144,9 +140,8 @@ my $PROGNAME = 'repo-make';
     foreach my $pkgname (@{$pkgheader->{pkgname}}) {
       # Get expected package filename
       my $filename = "$pkgname-"
-        . ($pkgheader->{epoch} ? "$pkgheader->{epoch}:" : '')
-        . "$pkgheader->{pkgver}-$pkgheader->{pkgrel}-"
-        . (($pkgheader->{arch}->[0] eq 'any') ? 'any' : $makepkgconf->{CARCH})
+        . "$pkgheader->{pkgver}->{$pkgname}-"
+        . ($pkgheader->{pkgarch}->{$pkgname} || $makepkgconf->{CARCH})
         . $makepkgconf->{PKGEXT};
 
       # Remember package filename and dependencies for later access
@@ -480,31 +475,75 @@ sub ParseConfig {
 # PKGBUILD parser
 sub ParsePKGBUILD {
   my ($aPath, $aBuilduser) = @_;
-
-  # List of variables, we need. The ones with "1" as value are arrays.
-  my %variables = (pkgver  => 0, pkgrel      => 0, epoch        => 0,
-                   pkgname => 1, provides    => 1, arch         => 1,
-                   depends => 1, makedepends => 1, checkdepends => 1);
+  my %values;
 
   # Open a bash instance in context of BUILDUSER.
   open2(my $fhout, my $fhin, 'su', $aBuilduser, '-s', '/usr/bin/bash');
 
-  # Send small shellscript to load PKGBUILD and print out variables.
+  # Preload our shell interpreter instance with a few helper functions
+  print $fhin <<'EOT';
+epoch=0
+
+get_full_version() {
+  for i in pkgver pkgrel epoch; do
+    local indirect="${i}_override"
+    eval $(declare -f package_$1 | sed -n "s/\(^[[:space:]]*$i=\)/${i}_override=/p")
+    [[ -z ${!indirect} ]] && eval ${indirect}=\"${!i}\"
+  done
+  if (( ! $epoch_override )); then
+    echo "$pkgver_override-$pkgrel_override"
+  else
+    echo "$epoch_override:$pkgver_override-$pkgrel_override"
+  fi
+}
+
+get_pkg_arch() {
+  local arch_override
+  eval $(declare -f package_$1 | sed -n 's/\(^[[:space:]]*arch=\)/arch_override=/p')
+  (( ${#arch_override[@]} == 0 )) && arch_override=("${arch[@]}")
+  if [[ $arch_override = "any" ]]; then
+    echo "any"
+  else
+    echo
+  fi
+}
+EOT
+
+  # Load PKGBUILD
   print $fhin "cd '$aPath'\n";
   print $fhin "source PKGBUILD\n";
-  print $fhin "IFS='\t'\n";
-  print $fhin "echo \"$_\t\${$_\[*\]}\"\n" foreach (keys(%variables));
-  close($fhin);
 
-  # Interpret response.
-  my %values;
-  while(my $line = <$fhout>) {
-    chomp($line);
+  # Get global variables
+  my @variables = ('pkgname', 'provides', 'arch', 'depends', 'makedepends', 'checkdepends');
+  print $fhin "IFS='\t'\n";
+  print $fhin "echo \"$_\t\${$_\[*\]}\"\n" foreach (@variables);
+  foreach (@variables) {
+    chomp(my $line = <$fhout>);
     my($varname, @values) = split(/\t/, $line);
     # Drop anything after the equal sign
     s/[<>=].*// foreach(@values);
-    $values{$varname} = ($variables{$varname} == 1) ? \@values : $values[0];
+    $values{$varname} = \@values;
   }
+
+  # Get package versions
+  print $fhin "echo \"$_\t\$(get_full_version $_)\"\n" foreach(@{$values{pkgname}});
+  $values{pkgver} = {};
+  foreach (@{$values{pkgname}}) {
+    chomp(my $line = <$fhout>);
+    my ($pkgname, $pkgver) = split(/\t/, $line);
+    $values{pkgver}->{$pkgname} = $pkgver;
+  }
+
+  # Get package architectures
+  print $fhin "echo \"$_\t\$(get_pkg_arch $_)\"\n" foreach(@{$values{pkgname}});
+  $values{pkgarch} = {};
+  foreach (@{$values{pkgname}}) {
+    chomp(my $line = <$fhout>);
+    my ($pkgname, $pkgarch) = split(/\t/, $line);
+    $values{pkgarch}->{$pkgname} = $pkgarch;
+  }
+
+  close($fhin);
   return \%values;
 }
 
