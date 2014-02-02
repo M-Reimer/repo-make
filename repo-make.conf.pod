@@ -42,6 +42,14 @@ Set the name of your repository here. Will be used when "repo-add" is called aft
 
 =back
 
+ CHECKSCRIPT=./checkpkgs.sh
+
+=over 5
+
+Optional check script for your quality assurance. The script, given here, is called for every newly created package. The path to the created package is passed as parameter. If the script exits with a nonzero exit code, then repo-make will stop processing and exits with an error message.
+
+=back
+
  firstpackage
  secondpackage
  dir1/thirdpackage

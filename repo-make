@@ -246,6 +246,13 @@ my $PROGNAME = 'repo-make';
     foreach my $pkgname (@$pkgnameref) {
       my $filename = $pkgfilename{$pkgname};
       die("Missing package: $filename\n") unless (-s "$pkgbuildpath/$filename");
+
+      # If configured, then run CHECKSCRIPT as BUILDUSER.
+      if ($cfg{CHECKSCRIPT}) {
+        system('su', $cfg{BUILDUSER}, '-c', "$cfg{CHECKSCRIPT} \"$pkgbuildpath/$filename\"");
+        die("Checkscript returned with error state for '$filename'\n") if ($?);
+      }
+
       unlink("$cfg{TARGET}/$filename");
       move("$pkgbuildpath/$filename", $cfg{TARGET})
         or die("Move of '$filename' to '$cfg{TARGET}' failed: $!\n");
