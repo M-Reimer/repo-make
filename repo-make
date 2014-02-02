@@ -121,6 +121,7 @@ my $PROGNAME = 'repo-make';
 
   # Read PKGBUILDs and preprocess header information
   my %pkgfilename;
+  my %dbgfilename;
   my @buildorder;
   foreach my $pkgbuildpath (@{$cfg{list}}) {
     next if ($pkgbuildpath =~ /(^#|^\s*$)/);
@@ -152,9 +153,14 @@ my $PROGNAME = 'repo-make';
         . "$pkgheader->{pkgver}->{$pkgname}-"
         . ($pkgheader->{pkgarch}->{$pkgname} || $makepkgconf->{CARCH})
         . $makepkgconf->{PKGEXT};
+      my $debugname = "$pkgname-debug-"
+        . "$pkgheader->{pkgver}->{$pkgname}-"
+        . ($pkgheader->{pkgarch}->{$pkgname} || $makepkgconf->{CARCH})
+        . $makepkgconf->{PKGEXT};
 
       # Remember package filename and dependencies for later access
       $pkgfilename{$pkgname} = $filename;
+      $dbgfilename{$pkgname} = $debugname;
       # Also store the same info for the provided packages
       foreach my $provided (@{$pkgheader->{provides}}) {
         $pkgfilename{$provided} = $filename;
@@ -182,6 +188,9 @@ my $PROGNAME = 'repo-make';
     foreach my $pkgname (@$pkgnameref) {
       if (-s "$cfg{TARGET}/$pkgfilename{$pkgname}") {
         unlink("$cfg{TARGET}/$pkgfilename{$pkgname}") or die();
+      }
+      if (-s "$cfg{TARGET}/$dbgfilename{$pkgname}") {
+        unlink("$cfg{TARGET}/$dbgfilename{$pkgname}") or die();
       }
     }
 
@@ -283,8 +292,14 @@ my $PROGNAME = 'repo-make';
     RemoveOrphanDeps() if ($opts{V});
   }
 
-  # Run cleanup on the target directory
+  # Create hash array of valid package filenames.
+  # All "pkgfilename"'s are valid. Add "dbgfilename"'s if package exists.
   my %packages = reverse(%pkgfilename);
+  while (my($pkgname, $filename) = each(%dbgfilename)) {
+    $packages{$filename} = $pkgname if (-s "$cfg{TARGET}/$filename");
+  }
+
+  # Run cleanup on the target directory
   opendir(my $DH, $cfg{TARGET}) or die();
   while (my $file = readdir($DH)) {
     next if ($file =~ /^\./);
