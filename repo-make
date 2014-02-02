@@ -27,6 +27,7 @@ use Pod::PlainText;
 use Cwd;
 use File::Copy;
 use File::Basename;
+use File::Spec::Functions qw(rel2abs);
 use POSIX;
 use Term::ANSIColor;
 use Archive::Tar;
@@ -81,6 +82,7 @@ my $PROGNAME = 'repo-make';
   ParseConfig('/etc/repo-make.conf', \%cfg)
     if (-s '/etc/repo-make.conf');
 
+  # Command line parameter "-t" overrides TARGET
   $cfg{TARGET} = $opts{t} if ($opts{t});
 
   # Read makepkg.conf
@@ -88,6 +90,13 @@ my $PROGNAME = 'repo-make';
 
   # Replace "$CARCH" in TARGET
   $cfg{TARGET} =~ s/\$CARCH/$makepkgconf->{CARCH}/;
+
+  # Export "PKGDEST" to make makepkg write packages directly to TARGET
+  $ENV{PKGDEST} = rel2abs($cfg{TARGET});
+
+  # Get sure BUILDUSER can write to TARGET
+  system ('chown', '-R', $cfg{BUILDUSER}, $cfg{TARGET});
+  die("Failed to change owner of '$cfg{TARGET}' to build user\n") if ($?);
 
   # Check for BUILDUSER. If not there, create it.
   my @builduserinfo;
@@ -169,6 +178,13 @@ my $PROGNAME = 'repo-make';
     }
     next PACKAGE if ($packages_built == @$pkgnameref);
 
+    # Get sure that all pre-existing packages are out of our way
+    foreach my $pkgname (@$pkgnameref) {
+      if (-s "$cfg{TARGET}/$pkgfilename{$pkgname}") {
+        unlink("$cfg{TARGET}/$pkgfilename{$pkgname}") or die();
+      }
+    }
+
     # Get sure that package path is owned by our build user
     system ('chown', '-R', $cfg{BUILDUSER}, $pkgbuildpath);
     die("Failed to change owner of '$pkgbuildpath' to build user\n") if ($?);
@@ -242,26 +258,25 @@ my $PROGNAME = 'repo-make';
     $SIG{QUIT} = 'DEFAULT';
     die("makepkg failed for '$pkgbuildpath'!\n") if ($?);
 
-    # Check if all packages, we expected, have been created and move in place
+    # Check if all packages, we expected, have been created
     foreach my $pkgname (@$pkgnameref) {
       my $filename = $pkgfilename{$pkgname};
-      die("Missing package: $filename\n") unless (-s "$pkgbuildpath/$filename");
+      my $pkgpath = "$cfg{TARGET}/$filename";
+      die("Missing package: $filename\n") unless (-s $pkgpath);
 
       # If configured, then run CHECKSCRIPT as BUILDUSER.
       if ($cfg{CHECKSCRIPT}) {
-        system('su', $cfg{BUILDUSER}, '-c', "$cfg{CHECKSCRIPT} \"$pkgbuildpath/$filename\"");
-        die("Checkscript returned with error state for '$filename'\n") if ($?);
+        system('su', $cfg{BUILDUSER}, '-c', "$cfg{CHECKSCRIPT} \"$pkgpath\"");
+        if ($?) {
+          unlink($pkgpath);
+          die("Checkscript returned with error state for '$filename'!\n");
+        }
       }
 
-      unlink("$cfg{TARGET}/$filename");
-      move("$pkgbuildpath/$filename", $cfg{TARGET})
-        or die("Move of '$filename' to '$cfg{TARGET}' failed: $!\n");
-
-      if ($makepkgconf->{BUILDENV}->{sign}) {
-        die("Signature missing!\n") unless (-s "$pkgbuildpath/$filename.sig");
-        unlink("$cfg{TARGET}/$filename.sig");
-        move("$pkgbuildpath/$filename.sig", $cfg{TARGET})
-          or die ("Move of '$filename.sig' to '$cfg{TARGET}' failed: $!\n");
+      # Check for signature
+      if ($makepkgconf->{BUILDENV}->{sign} && ! -s "$pkgpath.sig") {
+        unlink($pkgpath);
+        die("Signature missing for '$filename'!\n");
       }
     }
 
