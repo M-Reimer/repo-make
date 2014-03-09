@@ -148,15 +148,12 @@ my $PROGNAME = 'repo-make';
     push(@$dependsref, @{$pkgheader->{checkdepends}})
       if ($makepkgconf->{BUILDENV}->{check});
     foreach my $pkgname (@{$pkgheader->{pkgname}}) {
-      # Get expected package filename
-      my $filename = "$pkgname-"
-        . "$pkgheader->{pkgver}->{$pkgname}-"
+      # Get expected package filenames
+      my $suffix = "$pkgheader->{pkgver}->{$pkgname}-"
         . ($pkgheader->{pkgarch}->{$pkgname} || $makepkgconf->{CARCH})
         . $makepkgconf->{PKGEXT};
-      my $debugname = "$pkgname-debug-"
-        . "$pkgheader->{pkgver}->{$pkgname}-"
-        . ($pkgheader->{pkgarch}->{$pkgname} || $makepkgconf->{CARCH})
-        . $makepkgconf->{PKGEXT};
+      my $filename  = "$pkgname-$suffix";
+      my $debugname = "$pkgname-debug-$suffix";
 
       # Remember package filename and dependencies for later access
       $pkgfilename{$pkgname} = $filename;
