@@ -69,6 +69,7 @@ my $PROGNAME = 'repo-make';
   if (time() - $dbmtime > 24 * 60 * 60) {
     InfoMsg('Upgrading build system...');
     system('pacman', '-Syu', '--noconfirm');
+    die("pacman failed!\n") if ($?);
   }
 
   # Read config file(s)
@@ -168,8 +169,6 @@ my $PROGNAME = 'repo-make';
     push(@buildorder, [$pkgbuildpath, $pkgheader->{pkgname}, $dependsref]);
   }
 
-  RemoveOrphanDeps() if ($opts{V});
-
   # Now run over all packages again and build missing packages
   PACKAGE: foreach my $packagedata (@buildorder) {
     my ($pkgbuildpath, $pkgnameref, $pkgdepends) = @$packagedata;
@@ -180,6 +179,9 @@ my $PROGNAME = 'repo-make';
       $packages_built++ if (-s "$cfg{TARGET}/$pkgfilename{$pkgname}");
     }
     next PACKAGE if ($packages_built == @$pkgnameref);
+
+    # Remove orphan dependencies, not needed for this package (verify mode)
+    RemoveOrphanDeps($pkgdepends) if ($opts{V});
 
     # Get sure that all pre-existing packages are out of our way
     foreach my $pkgname (@$pkgnameref) {
@@ -285,9 +287,10 @@ my $PROGNAME = 'repo-make';
         die("Signature missing for '$filename'!\n");
       }
     }
-
-    RemoveOrphanDeps() if ($opts{V});
   }
+
+  # Final cleanup of orphan dependencies (verify mode)
+  RemoveOrphanDeps() if ($opts{V});
 
   # Create hash array of valid package filenames.
   # All "pkgfilename"'s are valid. Add "dbgfilename"'s if package exists.
@@ -417,11 +420,43 @@ sub ReadGPGAgentInfo {
   $ENV{GPG_AGENT_INFO} = $info;
 }
 
+# Removes orphan dependencies.
+# Optionally a reference to a list of packages to keep can be passed
 sub RemoveOrphanDeps {
+  my ($aPkgsToKeep) = @_;
+
+  # Get sure that we have the same output everywhere
+  local $ENV{LC_MESSAGES} = 'C';
+
+  # Get list of orphans
   open(my $fhlist, '-|', 'pacman', '-Qdtq') or die("Can't start pacman: $!\n");
-  my $list = join('', <$fhlist>);
+  chomp(my @list = <$fhlist>);
   close($fhlist);
-  my @list = split("\n", $list);
+  return if (@list == 0);
+
+  # Get hash array with packages (and provided packages) to keep
+  my %keeppkg;
+  if ($aPkgsToKeep) {
+    open(my $fhdevnull, '>', '/dev/null');
+    foreach my $pkgname (@$aPkgsToKeep) {
+      $keeppkg{$pkgname} = 1;
+      my $pid = open3(undef, my $fhout, $fhdevnull, 'pacman', '-Qqi', $pkgname);
+      chomp(my @info = <$fhout>);
+      waitpid($pid, 0);
+      next unless (@info);
+
+      if (my ($provides) = grep(/^Provides\s/, @info)) {
+        $provides =~ s/.*:\s*//;
+        next if ($provides eq 'None');
+        my @provided = split(/\s+/, $provides);
+        $_ =~ s/[<>=].*// foreach(@provided);
+        $keeppkg{$_} = 1 foreach(@provided);
+      }
+    }
+  }
+
+  # Uninstall orphan dependencies, we don't want to keep
+  @list = grep {!$keeppkg{$_}} @list;
   return if (@list == 0);
   InfoMsg('Uninstalling unrequired dependencies...');
   system('pacman', '-Rs', '--noconfirm', @list);
