@@ -434,23 +434,17 @@ sub RemoveOrphanDeps {
   close($fhlist);
   return if (@list == 0);
 
-  # Get hash array with packages (and provided packages) to keep
+  # Get hash array with packages to keep
   my %keeppkg;
   if ($aPkgsToKeep) {
-    open(my $fhdevnull, '>', '/dev/null');
     foreach my $pkgname (@$aPkgsToKeep) {
-      $keeppkg{$pkgname} = 1;
-      my $pid = open3(undef, my $fhout, $fhdevnull, 'pacman', '-Qqi', $pkgname);
-      chomp(my @info = <$fhout>);
-      waitpid($pid, 0);
-      next unless (@info);
-
-      if (my ($provides) = grep(/^Provides\s/, @info)) {
-        $provides =~ s/.*:\s*//;
-        next if ($provides eq 'None');
-        my @provided = split(/\s+/, $provides);
-        $_ =~ s/[<>=].*// foreach(@provided);
-        $keeppkg{$_} = 1 foreach(@provided);
+      open(my $fhout, '-|', 'pacman', '-Qsq', '^'.quotemeta($pkgname).'$')
+        or die("Can't start pacman: $!\n");
+      my $orig_pkgname = <$fhout>;
+      close($fhout);
+      if ($orig_pkgname) {
+        chomp($orig_pkgname);
+        $keeppkg{$orig_pkgname} = 1;
       }
     }
   }
