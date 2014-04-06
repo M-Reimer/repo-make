@@ -454,11 +454,11 @@ sub RemoveOrphanDeps {
     foreach my $pkgname (@$aPkgsToKeep) {
       open(my $fhout, '-|', 'pacman', '-Qsq', '^'.quotemeta($pkgname).'$')
         or die("Can't start pacman: $!\n");
-      my $orig_pkgname = <$fhout>;
+      my @orig_pkgnames = <$fhout>;
       close($fhout);
-      if ($orig_pkgname) {
-        chomp($orig_pkgname);
-        $keeppkg{$orig_pkgname} = 1;
+      if (@orig_pkgnames) {
+        chomp(@orig_pkgnames);
+        $keeppkg{$_} = 1 foreach(@orig_pkgnames);
       }
     }
   }
