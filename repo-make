@@ -211,6 +211,8 @@ my $PROGNAME = 'repo-make';
       die("Failed to change owner of '$pkgbuildpath' to build user\n") if ($?);
     }
 
+    InfoMsg("Resolving dependencies for '$pkgbuildpath'...");
+
     # Separate dependencies into "ours" and "system repository"
     my @repodeps;
     my @ourdeps;
@@ -553,6 +555,8 @@ sub ParseConfig {
 sub ParsePKGBUILD {
   my ($aPath, $aBuilduser) = @_;
   my %values;
+
+  die("PKGBUILD in '$aPath' not found\n") unless (-s "$aPath/PKGBUILD");
 
   # Open a bash instance in context of BUILDUSER.
   open2(my $fhout, my $fhin, 'su', $aBuilduser, '-s', '/usr/bin/bash');
