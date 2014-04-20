@@ -65,7 +65,7 @@ my $PROGNAME = 'repo-make';
   die("You have to be root to run repo-make!\n") if ($< != 0);
 
   # Check for package DB. If no update for over 24 hours, then force update!
-  my $dbmtime = (stat('/var/lib/pacman/sync'))[9] or die();
+  my $dbmtime = (stat('/var/lib/pacman/sync'))[9] or die($!);
   if (time() - $dbmtime > 24 * 60 * 60) {
     InfoMsg('Upgrading build system...');
     system('pacman', '-Syu', '--noconfirm');
@@ -76,10 +76,10 @@ my $PROGNAME = 'repo-make';
   my %cfg;
   ParseConfig('repo-make.conf', \%cfg, 1);
   die("Missing REPONAME in repomake.conf\n") unless defined($cfg{REPONAME});
-  $cfg{TARGET} = "repo";
+  $cfg{TARGET} = 'repo';
   ParseConfig('repo-make-custom.conf', \%cfg, 1)
     if (-s 'repo-make-custom.conf');
-  $cfg{BUILDUSER} = "build";
+  $cfg{BUILDUSER} = 'build';
   ParseConfig('/etc/repo-make.conf', \%cfg)
     if (-s '/etc/repo-make.conf');
 
@@ -195,10 +195,10 @@ my $PROGNAME = 'repo-make';
     # Get sure that all pre-existing packages are out of our way
     foreach my $pkgname (@$pkgnameref) {
       if (-s "$cfg{TARGET}/$pkgfilename{$pkgname}") {
-        unlink("$cfg{TARGET}/$pkgfilename{$pkgname}") or die();
+        unlink("$cfg{TARGET}/$pkgfilename{$pkgname}") or die($!);
       }
       if (-s "$cfg{TARGET}/$dbgfilename{$pkgname}") {
-        unlink("$cfg{TARGET}/$dbgfilename{$pkgname}") or die();
+        unlink("$cfg{TARGET}/$dbgfilename{$pkgname}") or die($!);
       }
     }
 
@@ -290,7 +290,7 @@ my $PROGNAME = 'repo-make';
 
       # If configured, then run CHECKSCRIPT as BUILDUSER.
       if ($cfg{CHECKSCRIPT}) {
-        system('su', $cfg{BUILDUSER}, '-c', "$cfg{CHECKSCRIPT} \"$pkgpath\"");
+        system('su', $cfg{BUILDUSER}, '-c', "$cfg{CHECKSCRIPT} '$pkgpath'");
         if ($?) {
           unlink($pkgpath);
           die("Checkscript returned with error state for '$filename'!\n");
@@ -316,7 +316,7 @@ my $PROGNAME = 'repo-make';
   }
 
   # Run cleanup on the target directory
-  opendir(my $DH, $cfg{TARGET}) or die();
+  opendir(my $DH, $cfg{TARGET}) or die($!);
   while (my $file = readdir($DH)) {
     next if ($file =~ /^\./);
     next if ($file !~ /\Q$makepkgconf->{PKGEXT}\E$/);
@@ -441,9 +441,6 @@ sub ReadGPGAgentInfo {
 sub RemoveOrphanDeps {
   my ($aPkgsToKeep) = @_;
 
-  # Get sure that we have the same output everywhere
-  local $ENV{LC_MESSAGES} = 'C';
-
   # Get list of orphans
   open(my $fhlist, '-|', 'pacman', '-Qdtq') or die("Can't start pacman: $!\n");
   chomp(my @list = <$fhlist>);
@@ -482,7 +479,7 @@ sub GetPKGDeps {
   state %cache;
   unless ($cache{$aPath}) {
     my @deplist;
-    open(my $fhlist, '-|', 'bsdtar', '-xOf', $aPath, '.PKGINFO') or die();
+    open(my $fhlist, '-|', 'bsdtar', '-xOf', $aPath, '.PKGINFO') or die($!);
     while(my $line = <$fhlist>) {
       my ($value) = $line =~ /^depend ?= ?(.+)$/ or next;
       # Drop anything after the equal sign

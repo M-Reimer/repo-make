@@ -6,9 +6,11 @@
 # Name of this repository
 REPONAME=testrepo
 
+# Optional script to check for common mistakes in newly built packages
+#CHECKSCRIPT=./checkpkg
+
 # Order to build packages. To temporarily disable build for a package, just
 # comment the line by prefixing it with "#".
-startlist
 firstpackage
 secondpackage
 dir1/thirdpackage
