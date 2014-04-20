@@ -15,10 +15,8 @@ vdrpbd Revision History
 - Support for checkdepends
 - Many bugfixes
 
-2014-xx-xx: Version x.x.x
+2014-04-20: Version 1.1.0
 
-- Now skipping packages, that can't be built on the current architecture
-- Variable "$CARCH" is now allowed in the TARGET parameter of repo-make.conf
 - Parser for PKGBUILD improved, so it should now (hopefully) support all
   common cases
 - Added CHECKSCRIPT parameter to define a quality assurance script for your
@@ -26,3 +24,5 @@ vdrpbd Revision History
 - Debug packages are now supported and properly handled by repo-make
 - Improved verify mode so it no longer uninstalls packages, needed for the
   next package in the build order
+- Now skipping packages, that can't be built on the current architecture
+- Variable "$CARCH" is now allowed in the TARGET parameter of repo-make.conf
