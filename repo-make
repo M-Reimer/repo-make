@@ -27,6 +27,7 @@ use Pod::PlainText;
 use Cwd;
 use File::Copy;
 use File::Basename;
+use File::Path qw(make_path);
 use File::Spec::Functions qw(rel2abs);
 use POSIX;
 use Term::ANSIColor;
@@ -121,7 +122,8 @@ my $PROGNAME = 'repo-make';
 
   # Check for target directory. If missing, try to create it.
   unless (-d $cfg{TARGET}) {
-    mkdir($cfg{TARGET}) or die("Failed to create directory '$cfg{TARGET}'\n");
+    make_path($cfg{TARGET}, {error => \my $err});
+    die("Failed to create directory '$cfg{TARGET}'\n") if (@$err);
   }
 
   # Get sure BUILDUSER can write to TARGET
