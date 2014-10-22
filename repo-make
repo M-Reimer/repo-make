@@ -61,13 +61,19 @@ my $PROGNAME = 'repo-make';
     'h'       => \&HELP_MESSAGE,
     'version' => \&VERSION_MESSAGE,
   );
-  GetOptions(\%opts, 't|target=s',
+  GetOptions(\%opts, 'C|directory=s',
+                     't|target=s',
                      'V|verify',
                      'h|help',
                      'version') or HELP_MESSAGE();
 
   # Check privileges. We have to be root!
   die("You have to be root to run repo-make!\n") if ($< != 0);
+
+  # Switch current directory if requested via command line
+  if ($opts{C}) {
+    chdir($opts{C}) or die("Failed to switch directory to $opts{C}: $!\n");
+  }
 
   # Check for package DB. If no update for over 24 hours, then force update!
   my $dbmtime = (stat('/var/lib/pacman/sync'))[9] or die($!);
@@ -681,6 +687,10 @@ It auto-generates packages based on a I<repo-make.conf> that has to exist in the
 Switches include:
 
 =over 5
+
+=item B<-C> DIR, B<--directory>=DIR
+
+Change to directory DIR before reading repo-make.conf or doing anything else.
 
 =item B<-t> PATH, B<--target>=PATH
 
