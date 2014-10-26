@@ -440,7 +440,7 @@ sub HandleGPGAgent {
 
   # Start daemon and read info file
   system('su', $aUserinfo->[PW_NAME], '-c',
-         'gpg-agent --daemon --write-env-file > /dev/null');
+         'gpg-agent --daemon --write-env-file --default-cache-ttl 7200 --pinentry-program /usr/bin/pinentry-curses > /dev/null');
   die("gpg-agent startup failed\n") if ($?);
   ReadGPGAgentInfo($infofile);
 }
