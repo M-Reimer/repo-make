@@ -130,8 +130,8 @@ my $PROGNAME = 'repo-make';
   system ('chown', '-R', $cfg{BUILDUSER}, $cfg{TARGET});
   die("Failed to change owner of '$cfg{TARGET}' to build user\n") if ($?);
 
-  # If enabled in makepkg.conf, change owner of BUILDDIR, SRCDEST, SRCPKGDEST
-  foreach my $makepkgdir ('BUILDDIR', 'SRCDEST', 'SRCPKGDEST') {
+  # If enabled in makepkg.conf, change owner of BUILDDIR and SRCDEST.
+  foreach my $makepkgdir ('BUILDDIR', 'SRCDEST') {
     if ($makepkgconf->{$makepkgdir}) {
       my $dir = $makepkgconf->{$makepkgdir};
       system('chown', '-R', $cfg{BUILDUSER}, $dir);
@@ -215,11 +215,10 @@ my $PROGNAME = 'repo-make';
       }
     }
 
-    # If no BUILDDIR, SRCDEST and SRCPKGDEST configured, then change owner of
+    # If no BUILDDIR and SRCDEST configured, then change owner of
     # package path to BUILDUSER
     unless ($makepkgconf->{BUILDDIR} &&
-            $makepkgconf->{SRCDEST} &&
-            $makepkgconf->{SRCPKGDEST}) {
+            $makepkgconf->{SRCDEST}) {
       system ('chown', '-R', $cfg{BUILDUSER}, $pkgbuildpath);
       die("Failed to change owner of '$pkgbuildpath' to build user\n") if ($?);
     }
@@ -650,7 +649,6 @@ sub ReadMakepkgConf {
     $values{PKGEXT} = $1     if ($line =~ /^PKGEXT=["']([^"']+)/);
     $values{BUILDDIR} = $1   if ($line =~ /^BUILDDIR=["']?([^"'\n]+)/);
     $values{SRCDEST} = $1    if ($line =~ /^SRCDEST=["']?([^"'\n]+)/);
-    $values{SRCPKGDEST} = $1 if ($line =~ /^SRCPKGDEST=["']?([^"'\n]+)/);
     $buildenv = $1 if ($line =~ /^BUILDENV=\(([^)]+)/);
   }
   close($FH);
@@ -660,10 +658,9 @@ sub ReadMakepkgConf {
   die("Can't get BUILDENV from makepkg.conf\n") unless(defined($buildenv));
   $values{BUILDENV} = { map {$_ => 1} split(/\s+/, $buildenv) };
 
-  # Special case. These three can be overriden via environment variables
+  # Special case. These two can be overriden via environment variables
   $values{BUILDDIR} = $ENV{BUILDDIR} if ($ENV{BUILDDIR});
   $values{SRCDEST} = $ENV{SRCDEST} if ($ENV{SRCDEST});
-  $values{SRCPKGDEST} = $ENV{SRCPKGDEST} if ($ENV{SRCPKGDEST});
 
   return \%values;
 }
