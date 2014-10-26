@@ -130,10 +130,13 @@ my $PROGNAME = 'repo-make';
   system ('chown', '-R', $cfg{BUILDUSER}, $cfg{TARGET});
   die("Failed to change owner of '$cfg{TARGET}' to build user\n") if ($?);
 
-  # If enabled in makepkg.conf, change owner of BUILDDIR and SRCDEST.
+  # If enabled in makepkg.conf, create BUILDDIR and SRCDEST and change owner
+  # to BUILDUSER.
   foreach my $makepkgdir ('BUILDDIR', 'SRCDEST') {
     if ($makepkgconf->{$makepkgdir}) {
       my $dir = $makepkgconf->{$makepkgdir};
+      make_path($dir, {error => \my $err});
+      die("Failed to create directory '$dir'\n") if (@$err);
       system('chown', '-R', $cfg{BUILDUSER}, $dir);
       die("Failed to change owner of '$dir' to build user\n") if ($?);
     }
