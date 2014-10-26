@@ -426,9 +426,9 @@ sub HandleGPGAgent {
   return unless (-x '/usr/bin/gpg-agent');
 
   # Make our builduser the owner of the tty, we run at.
-  my $tty = readlink('/proc/self/fd/0');
-  system('chown', $aUserinfo->[PW_NAME], $tty);
-  die("Failed to chown '$tty' to build user\n") if ($?);
+  die("STDIN is no TTY!\n") unless(-t STDIN);
+  chown($aUserinfo->[PW_UID], $aUserinfo->[PW_GID], *STDIN)
+    or die("Failed to chown tty to build user: $!\n");
 
   # If info file exists, then read it and check connection. If OK, then return
   my $infofile = "$aUserinfo->[PW_DIR]/.gpg-agent-info";
