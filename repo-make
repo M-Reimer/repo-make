@@ -76,11 +76,15 @@ my $PROGNAME = 'repo-make';
     chdir($opts{C}) or die("Failed to switch directory to $opts{C}: $!\n");
   }
 
-  # Check for package DB. If no update for over 24 hours, then force update!
-  my $dbmtime = (stat('/var/lib/pacman/sync'))[9] or die($!);
-  if (time() - $dbmtime > 24 * 60 * 60) {
+  # Always get sure the package DB is up-to-date
+  InfoMsg('Synchronizing package lists...');
+  system('pacman', '-Sy');
+  die("pacman failed!\n") if ($?);
+
+  # If no upgrade for over 24 hours, then force upgrade!
+  if (time() - GetLastSystemUpgradeTime() > 24 * 60 * 60) {
     InfoMsg('Upgrading build system...');
-    system('pacman', '-Syu', '--noconfirm');
+    system('pacman', '-Su', '--noconfirm');
     die("pacman failed!\n") if ($?);
   }
 
@@ -418,6 +422,22 @@ sub InfoMsg {
 sub WarnMsg {
   print STDERR color('bold yellow'), "==> $PROGNAME: WARNING: ", color('reset'),
                color('bold'), $_[0], color('reset'), "\n";
+}
+
+# Returns timestamp of last full system upgrade by parsing pacman.log
+sub GetLastSystemUpgradeTime {
+  my $bytestoread = 10000; # How many bytes to read from end of pacman.log
+
+  open(my $fh, '<', '/var/log/pacman.log') or die("Can't read pacman.log\n");
+  seek($fh, -$bytestoread, 2) if (-s $fh > $bytestoread);
+  read($fh, my $data, $bytestoread) or die($!);
+  close($fh);
+
+  my @times = $data =~
+    /^\[([^\]]+)\] \[PACMAN\] starting full system upgrade$/mg or return 0;
+
+  my ($year, $month, $day, $hour, $minute) = split(/[ :-]/, $times[-1]);
+  return mktime(0, $minute, $hour, $day, $month - 1, $year - 1900);
 }
 
 sub HandleGPGAgent {
