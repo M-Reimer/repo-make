@@ -149,6 +149,9 @@ my $PROGNAME = 'repo-make';
   # Get sure gpg-agent is running if we create signed packages
   HandleGPGAgent(\@builduserinfo) if ($makepkgconf->{BUILDENV}->{sign});
 
+  # Parsing of PKGBUILD headers may take some time... Print info message.
+  InfoMsg("Parsing PKGBUILD header data...");
+
   # Read PKGBUILDs and preprocess header information
   my %pkgfilename;
   my %dbgfilename;
