@@ -426,18 +426,32 @@ sub WarnMsg {
 
 # Returns timestamp of last full system upgrade by parsing pacman.log
 sub GetLastSystemUpgradeTime {
-  my $bytestoread = 10000; # How many bytes to read from end of pacman.log
+  # Default path to pacman.log
+  my $logpath = '/var/log/pacman.log';
 
-  open(my $fh, '<', '/var/log/pacman.log') or die("Can't read pacman.log\n");
-  seek($fh, -$bytestoread, 2) if (-s $fh > $bytestoread);
-  read($fh, my $data, $bytestoread) or die($!);
+  # Try to read alternative path from pacman.conf
+  if (open(my $fhconf, '<', '/etc/pacman.conf')) {
+    if (my ($logfilecfg) = grep(/^\s*LogFile/, <$fhconf>)) {
+      ($logpath) = $logfilecfg =~ /.*?=\s*(.*)/;
+    }
+    close($fhconf);
+  }
+
+  # Read pacman.log backwards
+  my $pid = open(my $fh, '-|', 'tac', $logpath)
+    or die("Failed to execute 'tac': $!\n");
+  while (my $line = <$fh>) {
+    if (my ($time) = $line =~
+        /^\[([^\]]+)\] \[PACMAN\] starting full system upgrade$/) {
+      my ($year, $month, $day, $hour, $minute) = split(/[ :-]/, $time);
+      return mktime(0, $minute, $hour, $day, $month - 1, $year - 1900);
+    }
+  }
+
+  # Wait for "tac" to terminate and check exit code
+  waitpid($pid, 0);
+  die("Failed to read pacman.log\n") if ($?);
   close($fh);
-
-  my @times = $data =~
-    /^\[([^\]]+)\] \[PACMAN\] starting full system upgrade$/mg or return 0;
-
-  my ($year, $month, $day, $hour, $minute) = split(/[ :-]/, $times[-1]);
-  return mktime(0, $minute, $hour, $day, $month - 1, $year - 1900);
 }
 
 sub HandleGPGAgent {
