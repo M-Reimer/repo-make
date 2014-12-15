@@ -467,24 +467,22 @@ sub HandleGPGAgent {
   chown($aUserinfo->[PW_UID], $aUserinfo->[PW_GID], *STDIN)
     or die("Failed to chown tty to build user: $!\n");
 
-  # If info file exists, then read it and check connection. If OK, then return
-  my $infofile = "$aUserinfo->[PW_DIR]/.gpg-agent-info";
-  if (-f $infofile) {
-    ReadGPGAgentInfo($infofile);
-    system('su', $aUserinfo->[PW_NAME], '-c', 'gpg-agent 2> /dev/null');
-    return unless ($?);
-  }
+  # Check if agent is already running
+  ReadGPGAgentInfo($aUserinfo);
+  system('su', $aUserinfo->[PW_NAME], '-c', 'gpg-agent 2> /dev/null');
+  return unless ($?);
 
   # Start daemon and read info file
   system('su', $aUserinfo->[PW_NAME], '-c',
          'gpg-agent --daemon --write-env-file --default-cache-ttl 7200 --pinentry-program /usr/bin/pinentry-curses > /dev/null');
   die("gpg-agent startup failed\n") if ($?);
-  ReadGPGAgentInfo($infofile);
+  ReadGPGAgentInfo($aUserinfo);
 }
 
+# Legacy GnuPG support (< 2.1)
 sub ReadGPGAgentInfo {
-  my ($aPath) = @_;
-  open(my $fh, '<', $aPath) or die("Failed to read '$aPath'\n");
+  my ($aUserinfo) = @_;
+  open(my $fh, '<', "$aUserinfo->[PW_DIR]/.gpg-agent-info") or return;
   (my $info = <$fh>) =~ s/^[^=]+=//;
   close($fh);
   $ENV{GPG_AGENT_INFO} = $info;
