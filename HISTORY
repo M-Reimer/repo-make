@@ -26,3 +26,13 @@ vdrpbd Revision History
   next package in the build order
 - Now skipping packages, that can't be built on the current architecture
 - Variable "$CARCH" is now allowed in the TARGET parameter of repo-make.conf
+
+2014-12-16: Version 1.2.0
+
+- Support for long parameters for repo-make (see man-page)
+- New option (-C or --directory) to change directory before reading
+  repo-make.conf
+- Improved gpg-agent handling to work better with nspawn and to support newer
+  gpg-agent versions (>= 2.1)
+- Better build-system update handling to get sure that the pacman-database is
+  up-to-date before building new packages.
