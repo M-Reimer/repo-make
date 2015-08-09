@@ -155,6 +155,7 @@ my $PROGNAME = 'repo-make';
   # Read PKGBUILDs and preprocess header information
   my %pkgfilename;
   my %dbgfilename;
+  my %providerpkg;
   my @buildorder;
   foreach my $pkgbuildpath (@{$cfg{list}}) {
     next if ($pkgbuildpath =~ /(^#|^\s*$)/);
@@ -191,9 +192,9 @@ my $PROGNAME = 'repo-make';
       # Remember package filename and dependencies for later access
       $pkgfilename{$pkgname} = $filename;
       $dbgfilename{$pkgname} = $debugname;
-      # Also store the same info for the provided packages
+      # Remember reference back to original package name for provided stuff
       foreach my $provided (@{$pkgheader->{provides}}) {
-        $pkgfilename{$provided} = $filename;
+        $providerpkg{$provided} = $pkgname;
       }
     }
 
@@ -242,6 +243,9 @@ my $PROGNAME = 'repo-make';
       if (defined($pkgfilename{$depend})) {
         push(@ourdeps, $depend);
       }
+      elsif (defined($providerpkg{$depend})) {
+        push(@ourdeps, $providerpkg{$depend});
+      }
       else {
         push(@repodeps, $depend);
       }
@@ -259,13 +263,13 @@ my $PROGNAME = 'repo-make';
           if (defined($pkgfilename{$depdepend})) {
             unshift(@ourdeps, $depdepend);
           }
+          elsif (defined($providerpkg{$depdepend})) {
+            unshift(@ourdeps, $providerpkg{$depdepend});
+          }
         }
         $depchecked{$depend} = 1;
       }
     } while (@ourdeps != @depstocheck);
-
-    # Get filenames for our dependencies
-    $_ = $pkgfilename{$_} foreach (@ourdeps);
 
     # Get sure that we don't have duplicates in the list of our dependencies
     my %ourdeps_hash = map {$_ => 1} @ourdeps;
@@ -276,8 +280,20 @@ my $PROGNAME = 'repo-make';
     if (@ourdeps > 0) {
       my $oldcwd = getcwd();
       chdir($cfg{TARGET});
-      AutoPacman('-U', '--needed', '--asdeps', @ourdeps)
-        or die("pacman failed!\n");
+      foreach my $depend (@ourdeps) {
+        InfoMsg("Attempting to install $pkgfilename{$depend}...");
+        my $success = AutoPacman('-U', '--needed', '--asdeps', $pkgfilename{$depend});
+        # It is common that installing a dependency fails if an already
+        # installed package depends on an old version. Then we have to try a
+        # second time and uninstall the old package recursively first.
+        unless ($success) {
+          InfoMsg("First attempt failed. Second attempt...");
+          AutoPacman('-Rc', $depend)
+            or die("Uninstall of old package failed!\n");
+          AutoPacman('-U', '--needed', '--asdeps', $pkgfilename{$depend})
+            or die("pacman failed!\n");
+        }
+      }
       chdir($oldcwd);
     }
     if (@repodeps > 0) {
