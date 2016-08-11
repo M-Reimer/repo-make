@@ -182,13 +182,12 @@ my $PROGNAME = 'repo-make';
     push(@$dependsref, @{$pkgheader->{checkdepends}})
       if ($makepkgconf->{BUILDENV}->{check});
     foreach my $pkgname (@{$pkgheader->{pkgname}}) {
-      my $suffix;
+      my $suffix = '';
       $suffix .= "$pkgheader->{epoch}:" if $pkgheader->{'epoch'};
       $suffix .= "$pkgheader->{pkgver}-" . "$pkgheader->{pkgrel}-";
 
-      # Check for 'any' in global arch and if pkgarch exists in pkgarch
-      if (($pkgheader->{arch}->[0] eq 'any')
-        or ($pkgheader->{pkgarch}->{$pkgname}->[0] and $pkgheader->{pkgarch}->{$pkgname}->[0] eq 'any')) {
+      # Check for 'any' in package architecture
+      if ($pkgheader->{pkgarch}->{$pkgname}->[0] eq 'any') {
         $suffix .= 'any';
       }
       else {
@@ -205,7 +204,7 @@ my $PROGNAME = 'repo-make';
       $dbgfilename{$pkgname} = $debugname;
 
       # Remember reference back to original package name for provided stuff
-      foreach my $provided ((@{$pkgheader->{provides}}, @{$pkgheader->{pkgprovides}->{$pkgname}})) {
+      foreach my $provided (@{$pkgheader->{pkgprovides}->{$pkgname}}) {
         $providerpkg{$provided} = $pkgname;
       }
     }
@@ -668,9 +667,12 @@ sub ParseSRCINFO {
     # We need this information globally.
     push(@{$values{'pkgname'}}, $current_pkgname);
 
-    # Possible non global arrays
-    @{($values{'pkgarch'}{$current_pkgname})} = $split[$index] =~ /^\tarch = (.*?)$/gm;
-    @{($values{'pkgprovides'}{$current_pkgname})} = $split[$index] =~ /^\tprovides = (.*?)$/gm;
+    # Possible non global arrays. Fall back to global if non-existent
+    foreach my $value ('arch', 'provides') {
+      my @entries = $split[$index] =~ /^\t$value = (.*?)$/gm;
+      @entries = @{$values{$value}} if (@entries == 0);
+      $values{"pkg$value"}{$current_pkgname} = \@entries;
+    }
   }
 
   return \%values;
