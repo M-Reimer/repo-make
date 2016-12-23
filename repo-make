@@ -401,7 +401,7 @@ my $PROGNAME = 'repo-make';
 
       # If the package file doesn't exist or is outdated, then remove from DB
       if (!$packages{$pkgfilename} ||
-          (stat("$cfg{TARGET}/$pkgfilename"))[9] > $tarfile->{mtime}) {
+          (stat("$cfg{TARGET}/$pkgfilename"))->mtime > $tarfile->{mtime}) {
         push(@dirstoremove, $dirname);
       }
       # If Package exists (and is up to date) then remove from list of packages
