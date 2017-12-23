@@ -284,8 +284,7 @@ my $PROGNAME = 'repo-make';
     } while (@ourdeps != @depstocheck);
 
     # Get sure that we don't have duplicates in the list of our dependencies
-    my %ourdeps_hash = map {$_ => 1} @ourdeps;
-    @ourdeps = keys(%ourdeps_hash);
+    RemoveDuplicates(\@ourdeps);
 
     # Install dependencies
     InfoMsg('Installing missing dependencies...') if (@ourdeps + @repodeps > 0);
@@ -453,6 +452,22 @@ sub InfoMsg {
 sub WarnMsg {
   print STDERR color('bold yellow'), "==> $PROGNAME: WARNING: ", color('reset'),
                color('bold'), $_[0], color('reset'), "\n";
+}
+
+# Removes duplicated items from the given array without changing the order
+# of items. Currently only for string arrays!
+sub RemoveDuplicates {
+  my ($arrayref) = @_;
+
+  for (my $index = 0; $index < @$arrayref; $index++) {
+    my $current = $arrayref->[$index];
+    for (my $subindex = $index + 1; $subindex < @$arrayref; $subindex++) {
+      if ($arrayref->[$subindex] eq $current) {
+        splice(@$arrayref, $subindex, 1);
+        $subindex--;
+      }
+    }
+  }
 }
 
 # Returns timestamp of last full system upgrade by parsing pacman.log
