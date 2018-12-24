@@ -531,70 +531,16 @@ sub ReadGPGAgentInfo {
   $ENV{GPG_AGENT_INFO} = $info;
 }
 
-# Gets a list of orphan dependencies even if they have "dependency circles"
-# Works around https://bugs.archlinux.org/task/59711
-sub GetOrphanDepsList {
-  # Get list of all packages that were installed as dependency
-  open(my $fhlist, '-|', 'pacman', '-Qdq') or die("Can't start pacman: $!\n");
-  chomp(my @alldeps = <$fhlist>);
-  close($fhlist);
-  die($!) if ($?);
-
-  # Create hash array with the lists of packages, that require the
-  # dependency packages
-  my %deplist;
-  foreach my $deppkg (@alldeps) {
-    open(my $fhlist, '-|', 'pacman', '-Qi', $deppkg) or die($!);
-    chomp(my @info = <$fhlist>);
-    close($fhlist);
-    die($!) if ($?);
-
-    (my $requiredby) = grep(/^Required By/, @info);
-    die("Failed to parse pacman info result!\n") if (!$requiredby);
-    $requiredby =~ s/^Required By\s*:\s*//;
-    $requiredby =~ s/\s+/ /g;
-
-    if ($requiredby eq "None") {
-      $deplist{$deppkg} = [];
-    }
-    else {
-      $deplist{$deppkg} = [split(/ /, $requiredby)];
-    }
-  }
-
-  # Run as long as the list size no longer reduces and delete all entries
-  # that are at least required by one package that has not been installed
-  # as a dependency.
-  my $lastlength = 0;
-  while ($lastlength != keys(%deplist)) {
-    $lastlength = keys(%deplist);
-    while (my ($key, $value) = each(%deplist))  {
-      my $match = 0;
-      foreach my $requiredby (@$value) {
-        if (!defined($deplist{$requiredby})) {
-          $match = 1;
-          last;
-        }
-      }
-      delete($deplist{$key}) if ($match);
-    }
-  }
-
-  return keys(%deplist);
-}
-
-
 # Removes orphan dependencies.
 # Optionally a reference to a list of packages to keep can be passed
 sub RemoveOrphanDeps {
   my ($aPkgsToKeep) = @_;
 
   # Get list of orphans
-  #open(my $fhlist, '-|', 'pacman', '-Qdtq') or die("Can't start pacman: $!\n");
-  #chomp(my @list = <$fhlist>);
-  #close($fhlist);
-  #return if (@list == 0);
-  my @list = GetOrphanDepsList();
+  open(my $fhlist, '-|', 'pacman', '-Qdtq') or die("Can't start pacman: $!\n");
+  chomp(my @list = <$fhlist>);
+  close($fhlist);
+  return if (@list == 0);
 
   # Get hash array with packages to keep
   my %keeppkg;
