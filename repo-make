@@ -692,7 +692,7 @@ sub ParseSRCINFO {
 
     # Possible non global arrays. Fall back to global if non-existent
     foreach my $value ('arch', 'provides') {
-      my @entries = $split[$index] =~ /^\t$value = (.*?)$/gm;
+      my @entries = $split[$index] =~ /^\t$value = (.*?)(?:=.*?)?$/gm;
       @entries = @{$values{$value}} if (@entries == 0);
       $values{"pkg$value"}{$current_pkgname} = \@entries;
     }
