@@ -320,7 +320,7 @@ my $PROGNAME = 'repo-make';
       setuid($builduserinfo[PW_UID]) or die('setuid failed');
       $ENV{HOME} = $builduserinfo[PW_DIR];
       chdir($pkgbuildpath);
-      exec('makepkg', '-fc');
+      exec('makepkg', '-fc', '--nosign');
     }
 
     # Wait for the forked process, we created above, and check for build errors
@@ -346,10 +346,26 @@ my $PROGNAME = 'repo-make';
         }
       }
 
-      # Check for signature
-      if ($makepkgconf->{BUILDENV}->{sign} && ! -s "$pkgpath.sig") {
-        unlink($pkgpath);
-        die("Signature missing for '$filename'!\n");
+      # Sign package(s) if signing is configured
+      if ($makepkgconf->{BUILDENV}->{sign}) {
+        my @tosign = ($pkgpath);
+        push(@tosign, "$cfg{TARGET}/$dbgfilename{$pkgname}")
+          if (-s "$cfg{TARGET}/$dbgfilename{$pkgname}");
+
+        my @signwithkey;
+        @signwithkey = ('-u', $makepkgconf->{GPGKEY})
+          if ($makepkgconf->{GPGKEY});
+
+        foreach my $tosignpath (@tosign) {
+          unlink("$tosignpath.sig");
+          InfoMsg("Signing '$tosignpath'...");
+          system('gpg', '--detach-sign', '--use-agent', @signwithkey, '--no-armor', $tosignpath);
+          if ($?) {
+            # Delete the actual package to force rebuild
+            unlink($pkgpath);
+            die("Signing of '$tosignpath' failed!\n");
+          }
+        }
       }
     }
   }
@@ -499,30 +515,14 @@ sub HandleGPGAgent {
 
   return unless (-x '/usr/bin/gpg-agent');
 
-  # Make our builduser the owner of the tty, we run at.
-  die("STDIN is no TTY!\n") unless(-t STDIN);
-  chown($aUserinfo->[PW_UID], $aUserinfo->[PW_GID], *STDIN)
-    or die("Failed to chown tty to build user: $!\n");
-
   # Check if agent is already running
-  ReadGPGAgentInfo($aUserinfo);
   system('su', $aUserinfo->[PW_NAME], '-c', 'gpg-agent 2> /dev/null');
   return unless ($?);
 
-  # Start daemon and read info file
+  # Start daemon
   system('su', $aUserinfo->[PW_NAME], '-c',
-         'gpg-agent --daemon --write-env-file --default-cache-ttl 7200 --pinentry-program /usr/bin/pinentry-curses > /dev/null');
+         'gpg-agent --daemon --default-cache-ttl 7200 --pinentry-program /usr/bin/pinentry-curses > /dev/null');
   die("gpg-agent startup failed\n") if ($?);
-  ReadGPGAgentInfo($aUserinfo);
-}
-
-# Legacy GnuPG support (< 2.1)
-sub ReadGPGAgentInfo {
-  my ($aUserinfo) = @_;
-  open(my $fh, '<', "$aUserinfo->[PW_DIR]/.gpg-agent-info") or return;
-  (my $info = <$fh>) =~ s/^[^=]+=//;
-  close($fh);
-  $ENV{GPG_AGENT_INFO} = $info;
 }
 
 # Removes orphan dependencies.
@@ -711,6 +711,7 @@ sub ReadMakepkgConf {
     $values{PKGEXT} = $1     if ($line =~ /^PKGEXT=["']([^"']+)/);
     $values{BUILDDIR} = $1   if ($line =~ /^BUILDDIR=["']?([^"'\n]+)/);
     $values{SRCDEST} = $1    if ($line =~ /^SRCDEST=["']?([^"'\n]+)/);
+    $values{GPGKEY} = $1     if ($line =~ /^GPGKEY=["']?([^"'\n]+)/);
     $buildenv = $1 if ($line =~ /^BUILDENV=\(([^)]+)/);
   }
   close($FH);
