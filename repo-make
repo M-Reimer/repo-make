@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #    repo-make - Tool to autobuild a set of PKGBUILD's into a working repository
-#    Copyright (C) 2013 Manuel Reimer <manuel.reimer@gmx.de>
+#    Copyright (C) 2019 Manuel Reimer <manuel.reimer@gmx.de>
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as published by
@@ -380,16 +380,11 @@ my $PROGNAME = 'repo-make';
   my $dbpath = "$cfg{TARGET}/$cfg{REPONAME}.db.tar.gz";
   if (-s $dbpath) {
     my @dirstoremove;
-    my %dirfiles;
     my $tar = Archive::Tar->new;
     my @files = $tar->read($dbpath);
     foreach my $tarfile (@files) {
       # Split dirname and filename part
       my ($dirname, $filename) = $tarfile->{name} =~ /([^\/]+)\/?(.*)/;
-
-      # Store list of files in directory for the case, we want to delete it
-      $dirfiles{$dirname} = [] unless($dirfiles{$dirname});
-      push(@{$dirfiles{$dirname}}, $tarfile->{name});
 
       # Only continue for the file "desc" and try to find full package filename
       next if ($filename ne 'desc');
@@ -409,16 +404,15 @@ my $PROGNAME = 'repo-make';
       }
     }
 
-    # Process removals and write updated DB file
+    # Run "repo-remove" if needed
     if (@dirstoremove > 0) {
-      foreach my $dirname (@dirstoremove) {
-        $tar->remove(@{$dirfiles{$dirname}});
-      }
-      $tar->write($dbpath, COMPRESS_GZIP);
-      my $shortdbpath = "$cfg{TARGET}/$cfg{REPONAME}.db";
-      unlink($shortdbpath);
-      symlink("$cfg{REPONAME}.db.tar.gz", $shortdbpath)
-        or copy($dbpath, $shortdbpath) or die("Failed to write $shortdbpath\n");
+      my @pkgnames = map { s/-[^-]+-[^-]+$//r } @dirstoremove;
+      my $oldcwd = getcwd();
+      chdir($cfg{TARGET});
+      unlink("$cfg{REPONAME}.db");
+      system('repo-remove', "$cfg{REPONAME}.db.tar.gz", @pkgnames);
+      die("repo-remove failed\n") if ($?);
+      chdir($oldcwd);
     }
   }
 
