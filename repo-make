@@ -651,7 +651,7 @@ sub ParseSRCINFO {
 
     my $oldcwd = getcwd();
     chdir($aPath);
-    open(my $fhmakepkg, '-|', 'su', $aBuilduser, '-c', 'makepkg --printsrcinfo')
+    open(my $fhmakepkg, '-|', 'su', $aBuilduser, '-c', 'makepkg --nosign --printsrcinfo')
       or die("Can't start makepkg --printsrcinfo: $!\n");
     my @srcinfo = <$fhmakepkg>;
     close($fhmakepkg);
