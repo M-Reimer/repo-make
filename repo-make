@@ -676,7 +676,8 @@ sub ParseSRCINFO {
 
   # Possible arrays
   foreach my $value ('arch', 'checkdepends', 'depends', 'makedepends', 'provides') {
-    @{$values{$value}} = $split[0] =~ /^\t$value = (.*?)(?:=.*?)?$/gm;
+    # Remove everything after "<", ">" or "=". We don't need version numbers.
+    @{$values{$value}} = $split[0] =~ /^\t$value = (.*?)(?:[<>=].*?)?$/gm;
   }
 
   # Possible variables
@@ -692,7 +693,8 @@ sub ParseSRCINFO {
 
     # Possible non global arrays. Fall back to global if non-existent
     foreach my $value ('arch', 'provides') {
-      my @entries = $split[$index] =~ /^\t$value = (.*?)(?:=.*?)?$/gm;
+      # Remove everything after "<", ">" or "=". We don't need version numbers.
+      my @entries = $split[$index] =~ /^\t$value = (.*?)(?:[<>=].*?)?$/gm;
       @entries = @{$values{$value}} if (@entries == 0);
       $values{"pkg$value"}{$current_pkgname} = \@entries;
     }
