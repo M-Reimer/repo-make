@@ -148,7 +148,7 @@ my $PROGNAME = 'repo-make';
   }
 
   # Get sure gpg-agent is running if we create signed packages
-  HandleGPGAgent(\@builduserinfo) if ($makepkgconf->{BUILDENV}->{sign});
+  HandleGPGAgent() if ($makepkgconf->{BUILDENV}->{sign});
 
   # Parsing of PKGBUILD headers may take some time... Print info message.
   InfoMsg("Parsing .SRCINFO data...");
@@ -511,17 +511,14 @@ sub GetLastSystemUpgradeTime {
 }
 
 sub HandleGPGAgent {
-  my ($aUserinfo) = @_;
-
   return unless (-x '/usr/bin/gpg-agent');
 
   # Check if agent is already running
-  system('su', $aUserinfo->[PW_NAME], '-c', 'gpg-agent 2> /dev/null');
+  system('gpg-agent 2> /dev/null');
   return unless ($?);
 
   # Start daemon
-  system('su', $aUserinfo->[PW_NAME], '-c',
-         'gpg-agent --daemon --default-cache-ttl 7200 --pinentry-program /usr/bin/pinentry-curses > /dev/null');
+  system('gpg-agent --daemon --default-cache-ttl 7200 --pinentry-program /usr/bin/pinentry-curses > /dev/null');
   die("gpg-agent startup failed\n") if ($?);
 }
 
