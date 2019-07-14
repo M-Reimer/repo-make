@@ -77,18 +77,6 @@ my $PROGNAME = 'repo-make';
     chdir($opts{C}) or die("Failed to switch directory to $opts{C}: $!\n");
   }
 
-  # Always get sure the package DB is up-to-date
-  InfoMsg('Synchronizing package lists...');
-  system('pacman', '-Sy');
-  die("pacman failed!\n") if ($?);
-
-  # If no upgrade for over 24 hours, then force upgrade!
-  if (time() - GetLastSystemUpgradeTime() > 24 * 60 * 60) {
-    InfoMsg('Upgrading build system...');
-    system('pacman', '-Su', '--noconfirm');
-    die("pacman failed!\n") if ($?);
-  }
-
   # Read config file(s)
   my %cfg;
   ParseConfig('repo-make.conf', \%cfg, 1);
@@ -215,6 +203,7 @@ my $PROGNAME = 'repo-make';
   }
 
   # Now run over all packages again and build missing packages
+  my $update_done = 0;
   PACKAGE: foreach my $packagedata (@buildorder) {
     my ($pkgbuildpath, $pkgnameref, $pkgdepends) = @$packagedata;
 
@@ -227,6 +216,13 @@ my $PROGNAME = 'repo-make';
 
     # Remove orphan dependencies, not needed for this package (verify mode)
     RemoveOrphanDeps($pkgdepends) if ($opts{V});
+
+    # At this point we know that we will build at least one package and
+    # orphan packages are gone. So now get sure the build system is up-to-date
+    if (!$update_done) {
+      SystemUpdate();
+      $update_done = 1;
+    }
 
     # Get sure that all pre-existing packages are out of our way
     foreach my $pkgname (@$pkgnameref) {
@@ -477,6 +473,21 @@ sub RemoveDuplicates {
         $subindex--;
       }
     }
+  }
+}
+
+# Handles updating of the build system
+sub SystemUpdate {
+  # Always get sure the package DB is up-to-date
+  InfoMsg('Synchronizing package lists...');
+  system('pacman', '-Sy');
+  die("pacman failed!\n") if ($?);
+
+  # If no upgrade for over 24 hours, then force upgrade!
+  if (time() - GetLastSystemUpgradeTime() > 24 * 60 * 60) {
+    InfoMsg('Upgrading build system...');
+    system('pacman', '-Su', '--noconfirm');
+    die("pacman failed!\n") if ($?);
   }
 }
 
