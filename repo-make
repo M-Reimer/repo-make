@@ -539,7 +539,7 @@ sub RemoveOrphanDeps {
   my ($aPkgsToKeep) = @_;
 
   # Get list of orphans
-  open(my $fhlist, '-|', 'pacman', '-Qdtq') or die("Can't start pacman: $!\n");
+  open(my $fhlist, '-|', 'pacman', '-Qdttq') or die("Can't start pacman: $!\n");
   chomp(my @list = <$fhlist>);
   close($fhlist);
   return if (@list == 0);
