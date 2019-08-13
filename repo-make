@@ -50,6 +50,9 @@ my $PROGNAME = 'repo-make';
 
 # Main code
 {
+  # If not on terminal, then disable colors
+  $ENV{ANSI_COLORS_DISABLED} = 1 if (!-t STDERR);
+
   # Colorize the error messages
   $SIG{__DIE__} =  sub {
     die(@_) if ($^S);
