@@ -548,13 +548,9 @@ sub HandleGPGAgent {
 sub RemoveOrphanDeps {
   my ($aPkgsToKeep) = @_;
 
-  # Get list of orphans
-  open(my $fhlist, '-|', 'pacman', '-Qdttq') or die("Can't start pacman: $!\n");
-  chomp(my @list = <$fhlist>);
-  close($fhlist);
-  return if (@list == 0);
-
-  # Get hash array with packages to keep
+  # Get hash array with packages to keep. We use "pacman -Qsq" to get the
+  # actual package names for names that are only "provided" by a package
+  # (vdr-api --> vdr)
   my %keeppkg;
   if ($aPkgsToKeep) {
     foreach my $pkgname (@$aPkgsToKeep) {
@@ -569,12 +565,21 @@ sub RemoveOrphanDeps {
     }
   }
 
-  # Uninstall orphan dependencies, we don't want to keep
-  @list = grep {!$keeppkg{$_}} @list;
-  return if (@list == 0);
-  InfoMsg('Uninstalling unrequired dependencies...');
-  system('pacman', '-Rs', '--noconfirm', @list);
-  die("pacman failed\n") if ($?);
+  # Do this as long as there are still packages found
+  while(1) {
+    # Get list of orphans
+    open(my $fhlist, '-|', 'pacman', '-Qdttq') or die("Can't start pacman: $!\n");
+    chomp(my @list = <$fhlist>);
+    close($fhlist);
+    return if (@list == 0);
+
+    # Uninstall orphan dependencies, we don't want to keep
+    @list = grep {!$keeppkg{$_}} @list;
+    return if (@list == 0);
+    InfoMsg('Uninstalling unrequired dependencies...');
+    system('pacman', '-Rs', '--noconfirm', @list);
+    die("pacman failed\n") if ($?);
+  }
 }
 
 sub GetPKGDeps {
