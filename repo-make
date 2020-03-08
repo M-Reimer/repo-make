@@ -73,7 +73,14 @@ my $PROGNAME = 'repo-make';
                      'version') or HELP_MESSAGE();
 
   # Check privileges. We have to be root!
-  die("You have to be root to run repo-make!\n") if ($< != 0);
+  my $no_root_err = <<EOM;
+You have to be root to run repo-make!
+
+WARNING: Don't ever use repo-make on a productive machine or a machine you use
+         for anything besides compiling software! It is made to be ran on a
+         dedicated build (virtual) machine!
+EOM
+  die($no_root_err) if ($< != 0);
 
   # Switch current directory if requested via command line
   if ($opts{C}) {
