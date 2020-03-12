@@ -543,6 +543,62 @@ sub HandleGPGAgent {
   die("gpg-agent startup failed\n") if ($?);
 }
 
+# Returns an array reference of orphan dependency cycle pairs.
+# An orphan dependency cycle are two packages that have been installed as
+# dependency that depend on each other but have no explicitly installed package
+# that depends on them.
+sub GetOrphanDepCycles {
+  # Get list of all packages that were installed as dependency
+  open(my $fhlist, '-|', 'pacman', '-Qdq') or die("Can't start pacman: $!\n");
+  chomp(my @alldeps = <$fhlist>);
+  close($fhlist);
+  die($!) if ($?);
+  return [] if (@alldeps == 0);
+
+  # Get info of all dependency packages
+  # In my tests the full list of dependency packages was way lower than ARG_MAX
+  # so pass all at once to pacman for speed
+  open($fhlist, '-|', 'pacman', '-Qi', @alldeps) or die($!);
+  chomp(my @info = <$fhlist>);
+  close($fhlist);
+  die($!) if ($?);
+
+  # Parse the info list.
+  # For packages that are required by exactly one package, remember the
+  # combination in %deps
+  my %deps;
+  my $name;
+  foreach my $line (@info) {
+    $name = $1 if ($line =~ /^Name\s*:\s*(.+)/);
+    if ($line =~ /^Required By\s*:\s*(.+)/) {
+      die("Failed to parse pacman info result!") if (!$name);
+      my @requiredby = split(/ /, $1);
+      if (@requiredby == 1 && $requiredby[0] ne "None") {
+        $deps{$name} = $requiredby[0];
+        $name = 0;
+      }
+    }
+  }
+
+  # Now finally get the cycles
+  my @cycles;
+  my @pkgs_to_check = keys(%deps);
+  foreach my $pkgname (@pkgs_to_check) {
+    if (defined($deps{$pkgname})) {
+      my $reqpkg = $deps{$pkgname};
+      if (defined($deps{$reqpkg})) {
+        if ($deps{$pkgname} eq $reqpkg && $deps{$reqpkg} eq $pkgname) {
+          push(@cycles, [$pkgname, $reqpkg]);
+          delete($deps{$pkgname});
+          delete($deps{$reqpkg});
+        }
+      }
+    }
+  }
+
+  return \@cycles
+}
+
 # Removes orphan dependencies.
 # Optionally a reference to a list of packages to keep can be passed
 sub RemoveOrphanDeps {
@@ -571,10 +627,20 @@ sub RemoveOrphanDeps {
     open(my $fhlist, '-|', 'pacman', '-Qdttq') or die("Can't start pacman: $!\n");
     chomp(my @list = <$fhlist>);
     close($fhlist);
-    return if (@list == 0);
 
-    # Uninstall orphan dependencies, we don't want to keep
+    # Filter out packages that are not meant to be uninstalled
     @list = grep {!$keeppkg{$_}} @list;
+
+    # Get list of orphan dependency cycles. If both cycle partners are not in
+    # our blacklist, add one of them to the orphan list
+    my $cycles = GetOrphanDepCycles();
+    foreach my $cycle (@$cycles) {
+      if (!$keeppkg{$cycle->[0]} && !$keeppkg{$cycle->[1]}) {
+        push(@list, $cycle->[0]);
+      }
+    }
+
+    # Finally uninstall if there are still packages left
     return if (@list == 0);
     InfoMsg('Uninstalling unrequired dependencies...');
     system('pacman', '-Rs', '--noconfirm', @list);
