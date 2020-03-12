@@ -520,7 +520,7 @@ sub GetLastSystemUpgradeTime {
   while (my $line = <$fh>) {
     if (my ($time) = $line =~
         /^\[([^\]]+)\] \[PACMAN\] starting full system upgrade$/) {
-      my ($year, $month, $day, $hour, $minute) = split(/[ :-]/, $time);
+      my ($year, $month, $day, $hour, $minute) = split(/[T:-]/, $time);
       return mktime(0, $minute, $hour, $day, $month - 1, $year - 1900);
     }
   }
