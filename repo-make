@@ -734,9 +734,13 @@ sub ParseSRCINFO {
   my $pkgbuildpath = "$aPath/PKGBUILD";
   die("PKGBUILD in '$aPath' not found\n") unless (-s $pkgbuildpath);
 
+  # If .SRCINFO is missing or older than PKGBUILD, then recreate it.
+  # Add one second to the .SRCINFO modification time to prevent recreation of
+  # .SRCINFO files for fresh GIT clones (where the mtime is the time where GIT
+  # created the files when cloning the remote repository)
   my $srcinfopath = "$aPath/.SRCINFO";
   if (!-s $srcinfopath ||
-      stat($srcinfopath)->mtime < stat($pkgbuildpath)->mtime) {
+      stat($srcinfopath)->mtime + 1 < stat($pkgbuildpath)->mtime) {
 
     my $oldcwd = getcwd();
     chdir($aPath);
