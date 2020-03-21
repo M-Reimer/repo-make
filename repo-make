@@ -46,7 +46,7 @@ use constant {
   PW_DIR  => 7
 };
 
-my $VERSION = '3.0.0';
+my $VERSION = '3.1.0';
 my $PROGNAME = 'repo-make';
 
 # Main code

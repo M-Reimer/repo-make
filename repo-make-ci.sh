@@ -55,8 +55,8 @@ REPO_MAKE_ARCH_MIRROR=${REPO_MAKE_ARCH_MIRROR:-https://mirrors.edge.kernel.org/a
 # repo-make version and checksum.
 #
 
-REPO_MAKE_VERSION=3.0.0
-REPO_MAKE_SHA1=d4512e27859c49da2adce14a70ea393cc54b4233
+REPO_MAKE_VERSION=3.1.0
+REPO_MAKE_SHA1=f4199b77e1a7e0d948e1c73a33ae5f5f89adaa83
 
 #
 # Helper functions
