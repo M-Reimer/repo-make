@@ -1,5 +1,6 @@
 #!/bin/bash
 #    repo-make - Tool to autobuild a set of PKGBUILD's into a working repository
+#    https://github.com/M-Reimer/repo-make
 #    Copyright (C) 2020 Manuel Reimer <manuel.reimer@gmx.de>
 #
 #    This program is free software: you can redistribute it and/or modify
