@@ -28,6 +28,7 @@ clean:
 	@rm -f repo-make.1
 	@rm -f repo-make.conf.5
 	@rm -f repo-make-*.tar.xz
+	@rm -rf src/ pkg/
 
 dist: clean
 	@tar --transform="s#^#repo-make-$(VERSION)/#" \
