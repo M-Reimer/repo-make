@@ -120,7 +120,7 @@ if [ "$REPO_MAKE_ARCH" = "x86_64" ]; then
   PACMAN_KEYRING="archlinux"
 
   # Get name and checksum of latest bootstrap image directly from archlinux.org
-  IMAGEINFO=$(wget -q https://www.archlinux.org/iso/latest/sha1sums.txt -O - | grep bootstrap | tee "$IMAGECACHE/archlinux-bootstrap.sha1")
+  IMAGEINFO=$(wget -q https://www.archlinux.org/iso/latest/sha1sums.txt -O - | grep bootstrap | tee "$TMPDIR/archlinux-bootstrap.sha1")
   IMAGENAME=${IMAGEINFO##* }
   IMAGECHECKSUM=${IMAGEINFO%% *}
   if [ "$IMAGENAME" == "$IMAGECHECKSUM" ] || [ ${#IMAGECHECKSUM} -ne 40 ]; then
@@ -134,7 +134,7 @@ if [ "$REPO_MAKE_ARCH" = "x86_64" ]; then
     rm -f "$IMAGECACHE/archlinux-bootstrap-"*
     echo "REPO-MAKE-CI: Downloading new Arch Linux image: $IMAGENAME"
     wget -q -nc "$REPO_MAKE_ARCH_MIRROR/iso/latest/$IMAGENAME" -O "$TMPDIR/$IMAGENAME"
-    env -C "$IMAGECACHE" sha1sum -c "archlinux-bootstrap.sha1"
+    env -C "$TMPDIR" sha1sum -c "archlinux-bootstrap.sha1"
     mv "$TMPDIR/$IMAGENAME" "$IMAGECACHE"
   else
     echo "REPO-MAKE-CI: Image $IMAGENAME available in image cache!"
