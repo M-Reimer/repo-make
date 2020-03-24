@@ -58,32 +58,6 @@ REPO_MAKE_ARCH_MIRROR=${REPO_MAKE_ARCH_MIRROR:-https://mirrors.edge.kernel.org/a
 REPO_MAKE_VERSION=3.1.0
 REPO_MAKE_SHA1=f4199b77e1a7e0d948e1c73a33ae5f5f89adaa83
 
-#
-# Helper functions
-#
-
-# Downloads file and verifies sha1sum
-# - First parameter: URL
-# - Second parameter: Target path
-# - Third parameter: SHA1SUM
-DownloadAndCheck () {
-  # Download
-  TMPFILE="$TMPDIR/download_file.tmp"
-  wget -q -nc "$1" -O "$TMPFILE"
-
-  # Get download checksum
-  DLCHECKSUM=$(sha1sum "$TMPFILE")
-  DLCHECKSUM=${DLCHECKSUM%% *}
-
-  # Verify checksum
-  if [ "$DLCHECKSUM" != "$3" ]; then
-    echo "REPO-MAKE-CI: Checksum check failed for ${1##*/}!"
-    rm "$TMPFILE"
-    exit 1
-  else
-    mv "$TMPFILE" "$2"
-  fi
-}
 
 #
 # Prepare the build environment we were launched in
@@ -136,7 +110,7 @@ trap cleanup EXIT
 #
 
 # Get name and checksum of latest bootstrap image directly from archlinux.org
-IMAGEINFO=$(wget -q https://www.archlinux.org/iso/latest/sha1sums.txt -O - | grep bootstrap)
+IMAGEINFO=$(wget -q https://www.archlinux.org/iso/latest/sha1sums.txt -O - | grep bootstrap | tee "$IMAGECACHE/archlinux-bootstrap.sha1")
 IMAGENAME=${IMAGEINFO##* }
 IMAGECHECKSUM=${IMAGEINFO%% *}
 if [ "$IMAGENAME" == "$IMAGECHECKSUM" ] || [ ${#IMAGECHECKSUM} -ne 40 ]; then
@@ -149,7 +123,8 @@ fi
 if [ ! -s "$IMAGECACHE/$IMAGENAME" ]; then
    rm -f "$IMAGECACHE/archlinux-bootstrap-"*
    echo "REPO-MAKE-CI: Downloading new Arch Linux image: $IMAGENAME"
-   DownloadAndCheck "$REPO_MAKE_ARCH_MIRROR/iso/latest/$IMAGENAME" "$IMAGECACHE/$IMAGENAME" "$IMAGECHECKSUM"
+   wget -q -nc "$REPO_MAKE_ARCH_MIRROR/iso/latest/$IMAGENAME" -O "$IMAGECACHE/$IMAGENAME"
+   env -C "$IMAGECACHE" sha1sum -c "archlinux-bootstrap.sha1"
 else
   echo "REPO-MAKE-CI: Image $IMAGENAME available in image cache!"
 fi
@@ -214,7 +189,9 @@ mount --rbind "$SOURCECACHE" "$CHROOT/home/build/srcdest"
 # Download repo-make, verify checksum
 REPO_MAKE_PKG="repo-make-$REPO_MAKE_VERSION-1-any.pkg.tar.xz"
 REPO_MAKE_URL="https://github.com/M-Reimer/repo-make/releases/download/$REPO_MAKE_VERSION/$REPO_MAKE_PKG"
-DownloadAndCheck "$REPO_MAKE_URL" "$CHROOT/root/$REPO_MAKE_PKG" "$REPO_MAKE_SHA1"
+wget -q -nc "$REPO_MAKE_URL" -O "$CHROOT/root/$REPO_MAKE_PKG"
+echo "$REPO_MAKE_PKG  $REPO_MAKE_SHA1" > "$CHROOT/root/$REPO_MAKE_PKG.sha1"
+env -C "$CHROOT/root" sha1sum -c "$REPO_MAKE_PKG.sha1"
 
 # Hardcoded for now. Actually making this "multi arch" would require some
 # additional work (different bootstrap images and some adaptions for parameters)
