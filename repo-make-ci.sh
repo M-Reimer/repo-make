@@ -153,7 +153,7 @@ elif [ "$REPO_MAKE_ARCH" = "armv7h" ]; then
   # Arch Linux ARM does not have any secure way to get checksums from, so we
   # have to use GPG for verification
   IMAGENAME="ArchLinuxARM-rpi-2-latest.tar.gz"
-  OURIMAGENAME="$IMAGENAME_$(date +%Y-%m).tar.gz"
+  OURIMAGENAME="$IMAGENAME-$(date +%Y-%m).tar.gz"
   if [ ! -s "$IMAGECACHE/$OURIMAGENAME" ]; then
     rm -f "$IMAGECACHE/ArchLinuxARM-"*
     echo "REPO-MAKE-CI: Downloading new Arch Linux image: $OURIMAGENAME"
@@ -228,7 +228,7 @@ mount --rbind "$SOURCECACHE" "$CHROOT/home/build/srcdest"
 REPO_MAKE_PKG="repo-make-$REPO_MAKE_VERSION-1-any.pkg.tar.xz"
 REPO_MAKE_URL="https://github.com/M-Reimer/repo-make/releases/download/$REPO_MAKE_VERSION/$REPO_MAKE_PKG"
 wget -q -nc "$REPO_MAKE_URL" -O "$CHROOT/root/$REPO_MAKE_PKG"
-echo "$REPO_MAKE_PKG  $REPO_MAKE_SHA1" > "$CHROOT/root/$REPO_MAKE_PKG.sha1"
+echo "$REPO_MAKE_SHA1  $REPO_MAKE_PKG" > "$CHROOT/root/$REPO_MAKE_PKG.sha1"
 env -C "$CHROOT/root" sha1sum -c "$REPO_MAKE_PKG.sha1"
 
 # Install repo-make into chroot, run build
