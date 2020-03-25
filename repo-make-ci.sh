@@ -153,20 +153,22 @@ elif [ "$REPO_MAKE_ARCH" = "armv7h" ]; then
   # Arch Linux ARM does not have any secure way to get checksums from, so we
   # have to use GPG for verification
   IMAGENAME="ArchLinuxARM-rpi-2-latest.tar.gz"
-  if [ ! -s "$IMAGECACHE/$IMAGENAME" ]; then
-    echo "REPO-MAKE-CI: Downloading new Arch Linux image: $IMAGENAME"
-    wget -q -nc "http://os.archlinuxarm.org/os/$IMAGENAME" -O "$TMPDIR/$IMAGENAME"
-    wget -q -nc "http://os.archlinuxarm.org/os/$IMAGENAME.sig" -O "$TMPDIR/$IMAGENAME.sig"
+  OURIMAGENAME="$IMAGENAME_$(date +%Y-%m).tar.gz"
+  if [ ! -s "$IMAGECACHE/$OURIMAGENAME" ]; then
+    rm -f "$IMAGECACHE/ArchLinuxARM-"*
+    echo "REPO-MAKE-CI: Downloading new Arch Linux image: $OURIMAGENAME"
+    wget -q -nc "http://os.archlinuxarm.org/os/$IMAGENAME" -O "$TMPDIR/$OURIMAGENAME"
+    wget -q -nc "http://os.archlinuxarm.org/os/$IMAGENAME.sig" -O "$TMPDIR/$OURIMAGENAME.sig"
     gpg --recv-key 68B3537F39A313B3E574D06777193F152BDBE6A6
-    gpg --verify "$TMPDIR/$IMAGENAME.sig"
-    mv "$TMPDIR/$IMAGENAME" "$IMAGECACHE"
+    gpg --verify "$TMPDIR/$OURIMAGENAME.sig"
+    mv "$TMPDIR/$OURIMAGENAME" "$IMAGECACHE"
   else
-    echo "REPO-MAKE-CI: Image $IMAGENAME available in image cache!"
+    echo "REPO-MAKE-CI: Image $OURIMAGENAME available in image cache!"
   fi
 
   # Extract image to chroot path
   echo "REPO-MAKE-CI: Extracting Arch Linux bootstrap image"
-  tar -x -f "$IMAGECACHE/$IMAGENAME" -C "$CHROOT"
+  tar -x -f "$IMAGECACHE/$OURIMAGENAME" -C "$CHROOT"
 
   # Arch Linux ARM has a symlink as /etc/resolv.conf. Remove it.
   rm "$CHROOT/etc/resolv.conf"
