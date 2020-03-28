@@ -201,7 +201,7 @@ cp -f /etc/resolv.conf "$CHROOT/etc"
 # Copy makepkg.conf if possible
 if [ -s "$REPO_MAKE_MAKEPKG_CONF" ]; then
   echo "REPO-MAKE-CI: Using makepkg.conf from: $REPO_MAKE_MAKEPKG_CONF"
-  cp -f "$REPO_MAKE_MAKEPKG_CONF" "$CHROOT/etc"
+  cp -f "$REPO_MAKE_MAKEPKG_CONF" "$CHROOT/etc/makepkg.conf"
 else
   echo "REPO-MAKE-CI: WARNING: Using default makepkg.conf!"
 fi
