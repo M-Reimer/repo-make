@@ -250,4 +250,4 @@ chroot "$CHROOT" /bin/bash -c \
   "source /etc/profile; \
   chown -R build /home/build; \
   pacman -U --noconfirm /root/$REPO_MAKE_PKG; \
-  repo-make --restore-repo-mtimes -V -C /home/build/pkgbuilds -t /home/build/target/$REPO_MAKE_ARCH"
+  repo-make --restore-repo-mtimes -V -C /home/build/pkgbuilds -t /home/build/target"
