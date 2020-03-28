@@ -107,6 +107,8 @@ function cleanup {
   umount "$CHROOT/home/build/srcdest"
   umount "$CHROOT"
   rm -rf --one-file-system "$TMPDIR" && echo "REPO-MAKE-CI: Deleted dir $TMPDIR"
+  # Caching/archiving of VCS sources is just asking for trouble so delete them!
+  rm -rf "$SOURCECACHE/"*/
   exit $EXIT_CODE
 }
 trap cleanup EXIT
