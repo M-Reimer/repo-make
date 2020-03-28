@@ -206,6 +206,12 @@ else
   echo "REPO-MAKE-CI: WARNING: Using default makepkg.conf!"
 fi
 
+# We need to install distcc if requested in makepkg.conf
+DISTCC=""
+if grep '^BUILDENV=' "$CHROOT/etc/makepkg.conf" | grep -v '!distcc'; then
+  DISTCC="distcc"
+fi
+
 # Configure our SRCDEST for caching
 echo "SRCDEST='/home/build/srcdest'" >> "$CHROOT/etc/makepkg.conf"
 
@@ -222,7 +228,7 @@ chroot "$CHROOT" /bin/bash -c \
   pacman -Sy --noconfirm; \
   pacman -S --noconfirm --needed $PACMAN_KEYRING-keyring; \
   pacman -Su --noconfirm; \
-  pacman -S --needed --noconfirm base-devel; \
+  pacman -S --needed --noconfirm base-devel $DISTCC; \
   locale-gen; \
   useradd -m build"
 
